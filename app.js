@@ -53,6 +53,7 @@ const state = {
   sourceIndex: 0,
   hls: null,
   recoveryTimer: null,
+  controlsHideTimer: null,
   toastTimer: null,
   failedSources: new Set(),
   sourceRecoveries: new Map(),
@@ -71,6 +72,7 @@ const state = {
   libraryQuery: "",
   libraryCategory: "all",
   libraryOpen: false,
+  controlsVisible: true,
   pageMaximized: false,
   theaterMode: false,
   initialized: false
@@ -119,9 +121,15 @@ function bindControls() {
   player.addEventListener("canplay", notePlaybackProgress);
   player.addEventListener("progress", notePlaybackProgress);
   player.addEventListener("timeupdate", notePlaybackProgress);
-  player.addEventListener("click", togglePlayback);
+  videoFrame.addEventListener("click", handleVideoSurfaceClick);
+  videoFrame.addEventListener("mousemove", () => {
+    if (!player.paused) showPlayerControls({ temporary: true });
+  });
   player.addEventListener("keydown", (event) => {
-    if (player.paused && [" ", "Enter", "k", "K"].includes(event.key)) queuePlaybackIntent();
+    if ([" ", "Enter", "k", "K"].includes(event.key)) {
+      event.preventDefault();
+      togglePlayback();
+    }
   });
   player.addEventListener("play", () => {
     markPlaybackWanted();
@@ -133,6 +141,7 @@ function bindControls() {
     state.autoplayRequested = false;
     state.pendingPlayIntentUntil = 0;
     clearRecoveryTimer();
+    showPlayerControls();
     setStatus("已暂停", "warn");
     sourceHealth.textContent = `线路 ${state.sourceIndex + 1} 暂停`;
     syncPlayOverlay();
@@ -143,6 +152,7 @@ function bindControls() {
     clearRecoveryTimer();
     setStatus("播放中", "good");
     syncPlayOverlay();
+    scheduleControlsAutoHide();
   });
   player.addEventListener("volumechange", syncPlayerControls);
 
@@ -524,6 +534,21 @@ function queuePlaybackIntent() {
   markPlaybackWanted({ attemptPlay: true });
 }
 
+function handleVideoSurfaceClick(event) {
+  if (event.target.closest(".player-chrome, .play-overlay")) return;
+
+  if (player.paused) {
+    showPlayerControls();
+    return;
+  }
+
+  if (state.controlsVisible) {
+    hidePlayerControls();
+  } else {
+    showPlayerControls();
+  }
+}
+
 function togglePlayback() {
   if (player.paused) {
     queuePlaybackIntent();
@@ -562,7 +587,45 @@ function hasPendingPlayIntent() {
 
 function syncPlayOverlay() {
   playOverlay.hidden = !player.paused;
+  if (player.paused) showPlayerControls();
   syncPlayerControls();
+}
+
+function showPlayerControls(options = {}) {
+  state.controlsVisible = true;
+  syncPlayerControlsVisibility();
+
+  if (options.temporary) {
+    scheduleControlsAutoHide();
+  } else {
+    clearControlsHideTimer();
+  }
+}
+
+function hidePlayerControls() {
+  if (player.paused) return;
+  clearControlsHideTimer();
+  state.controlsVisible = false;
+  syncPlayerControlsVisibility();
+}
+
+function scheduleControlsAutoHide(delayMs = 2800) {
+  clearControlsHideTimer();
+  if (player.paused) return;
+
+  state.controlsHideTimer = window.setTimeout(() => {
+    hidePlayerControls();
+  }, delayMs);
+}
+
+function clearControlsHideTimer() {
+  if (!state.controlsHideTimer) return;
+  window.clearTimeout(state.controlsHideTimer);
+  state.controlsHideTimer = null;
+}
+
+function syncPlayerControlsVisibility() {
+  videoFrame.classList.toggle("controls-hidden", !state.controlsVisible && !player.paused);
 }
 
 function toggleMuted() {

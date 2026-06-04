@@ -93,6 +93,7 @@ button {
   pointer-events: none;
   content: "";
   background: linear-gradient(to top, rgba(2, 3, 4, 0.6), rgba(2, 3, 4, 0));
+  transition: opacity 160ms ease;
 }
 
 .player {
@@ -152,6 +153,21 @@ button {
   padding: 44px 12px 12px;
   pointer-events: none;
   background: linear-gradient(to top, rgba(2, 3, 4, 0.76), rgba(2, 3, 4, 0));
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.video-frame.controls-hidden::after {
+  opacity: 0;
+}
+
+.video-frame.controls-hidden .player-chrome {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
 }
 
 .player-control-strip {
