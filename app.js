@@ -7,6 +7,8 @@ const FATAL_RECOVERY_DELAY_MS = 7000;
 const RECOVERY_SETTLE_MS = 18000;
 const MAX_CURRENT_SOURCE_RECOVERIES = 1;
 const HTTPS_HLS_PROXY_PREFIX = "https://api.codetabs.com/v1/proxy?quest=";
+const SERVICE_WORKER_URL = "./sw.js?v=20260604-9";
+const HLS_PROXY_PATH = "./__hls_proxy__";
 const CHANNEL_CATEGORIES = [
   { id: "all", label: "全部" },
   { id: "cctv", label: "央视" },
@@ -62,6 +64,9 @@ const state = {
   failedSources: new Set(),
   sourceRecoveries: new Map(),
   sourceLoadStartedAt: 0,
+  sourceLoadToken: 0,
+  nativePlaylistObjectUrl: "",
+  hlsProxyWorkerReady: null,
   lastProgressAt: 0,
   lastCurrentTime: 0,
   autoplayRequested: false,
@@ -86,6 +91,7 @@ async function init() {
   renderChannels();
   renderLibrary();
   bindControls();
+  registerHlsProxyWorker();
 
   const savedChannel = Number(localStorage.getItem("fatfeet-tv-channel") || 0);
   const startIndex = Number.isFinite(savedChannel) ? savedChannel : 0;
@@ -230,22 +236,32 @@ function pickPreferredSource(channel) {
   return 0;
 }
 
-function loadCurrentSource({ autoplay = true } = {}) {
+async function loadCurrentSource({ autoplay = true } = {}) {
   const channel = state.channels[state.channelIndex];
   const source = getChannelSources(channel)[state.sourceIndex];
   if (!source) return;
 
   clearRecoveryTimer();
+  const sourceLoadToken = ++state.sourceLoadToken;
   state.sourceLoadStartedAt = Date.now();
   state.lastProgressAt = 0;
   state.lastCurrentTime = 0;
   const shouldAutoplay = autoplay && !state.userPaused;
   state.autoplayRequested = shouldAutoplay;
   const nativeHls = !isDirectMediaSource(source) && shouldUseNativeHls(source);
+  const nativeProxyingHls = nativeHls && shouldUseNativeHlsProxy(source);
   const proxyingHls = !nativeHls && shouldProxyHlsSource(source);
-  const sourceMode = nativeHls && canUseNativeAirPlay() ? " 原生" : proxyingHls ? " 代理" : "";
+  const sourceMode = nativeProxyingHls ? " 手机代理" : nativeHls && canUseNativeAirPlay() ? " 原生" : proxyingHls ? " 代理" : "";
   setStatus(
-    nativeHls && canUseNativeAirPlay() ? "AirPlay 原生线路" : proxyingHls ? "线上代理连接中" : source.status === "ok" ? "连接稳定" : "尝试线路",
+    nativeProxyingHls
+      ? "手机代理连接中"
+      : nativeHls && canUseNativeAirPlay()
+        ? "AirPlay 原生线路"
+        : proxyingHls
+          ? "线上代理连接中"
+          : source.status === "ok"
+            ? "连接稳定"
+            : "尝试线路",
     source.status === "ok" ? "good" : "warn"
   );
   sourceHealth.textContent = `线路 ${state.sourceIndex + 1}${sourceMode}`;
@@ -256,11 +272,15 @@ function loadCurrentSource({ autoplay = true } = {}) {
     state.hls = null;
   }
   suppressPauseTracking();
+  clearNativePlaylistObjectUrl();
   player.removeAttribute("src");
   player.load();
 
   if (isDirectMediaSource(source)) {
     player.src = source.url;
+  } else if (nativeProxyingHls) {
+    const loaded = await loadNativeProxiedHlsSource(source, sourceLoadToken);
+    if (!loaded) return;
   } else if (shouldUseNativeHls(source)) {
     player.src = source.url;
   } else if (window.Hls?.isSupported()) {
@@ -389,6 +409,131 @@ function clearRecoveryTimer() {
     window.clearTimeout(state.recoveryTimer);
     state.recoveryTimer = null;
   }
+}
+
+async function loadNativeProxiedHlsSource(source, sourceLoadToken) {
+  try {
+    const serviceWorkerReady = await ensureHlsProxyWorkerReady();
+    if (serviceWorkerReady) {
+      if (sourceLoadToken !== state.sourceLoadToken) return false;
+      player.src = nativeHlsProxyUrl(source.url);
+      return true;
+    }
+
+    const response = await fetch(proxyHlsUrl(source.url), { cache: "no-store" });
+    if (!response.ok) throw new Error(`Proxy returned ${response.status}`);
+
+    const playlist = await response.text();
+    if (!playlist.includes("#EXTM3U")) throw new Error("Proxy did not return an HLS playlist");
+
+    const rewrittenPlaylist = rewriteHlsPlaylist(playlist, source.url);
+    const playlistBlob = new Blob([rewrittenPlaylist], {
+      type: "application/vnd.apple.mpegurl"
+    });
+    const playlistUrl = URL.createObjectURL(playlistBlob);
+
+    if (sourceLoadToken !== state.sourceLoadToken) {
+      URL.revokeObjectURL(playlistUrl);
+      return false;
+    }
+
+    state.nativePlaylistObjectUrl = playlistUrl;
+    player.src = playlistUrl;
+    return true;
+  } catch (error) {
+    console.warn("Native HLS proxy failed", error);
+    if (sourceLoadToken !== state.sourceLoadToken) return false;
+
+    setStatus("手机代理连接失败", "warn");
+    sourceHealth.textContent = `线路 ${state.sourceIndex + 1} 手机代理失败`;
+    if (state.autoplayRequested || hasPendingPlayIntent()) {
+      scheduleSourceRecovery("手机代理连接失败，正在换线", {
+        delay: FATAL_RECOVERY_DELAY_MS,
+        force: true
+      });
+    }
+    return false;
+  }
+}
+
+function clearNativePlaylistObjectUrl() {
+  if (!state.nativePlaylistObjectUrl) return;
+  URL.revokeObjectURL(state.nativePlaylistObjectUrl);
+  state.nativePlaylistObjectUrl = "";
+}
+
+function registerHlsProxyWorker() {
+  if (!canUseHlsProxyWorker()) return;
+  ensureHlsProxyWorkerReady();
+}
+
+function canUseHlsProxyWorker() {
+  return "serviceWorker" in window.navigator && window.isSecureContext;
+}
+
+function ensureHlsProxyWorkerReady() {
+  if (!canUseHlsProxyWorker()) return Promise.resolve(false);
+  if (state.hlsProxyWorkerReady) return state.hlsProxyWorkerReady;
+
+  state.hlsProxyWorkerReady = window.navigator.serviceWorker
+    .register(SERVICE_WORKER_URL, { scope: "./" })
+    .then(async (registration) => {
+      const worker = registration.installing || registration.waiting || registration.active;
+      if (worker && worker.state !== "activated") {
+        await waitForServiceWorkerActivation(worker);
+      }
+
+      await window.navigator.serviceWorker.ready;
+      if (!window.navigator.serviceWorker.controller) {
+        await waitForServiceWorkerController();
+      }
+
+      return Boolean(window.navigator.serviceWorker.controller);
+    })
+    .catch((error) => {
+      console.warn("HLS proxy service worker unavailable", error);
+      return false;
+    });
+
+  return state.hlsProxyWorkerReady;
+}
+
+function waitForServiceWorkerActivation(worker) {
+  return new Promise((resolve) => {
+    const timeout = window.setTimeout(resolve, 2200);
+    worker.addEventListener(
+      "statechange",
+      () => {
+        if (worker.state === "activated") {
+          window.clearTimeout(timeout);
+          resolve();
+        }
+      },
+      { once: false }
+    );
+  });
+}
+
+function waitForServiceWorkerController() {
+  return new Promise((resolve) => {
+    const timeout = window.setTimeout(resolve, 2200);
+    window.navigator.serviceWorker.addEventListener(
+      "controllerchange",
+      () => {
+        window.clearTimeout(timeout);
+        resolve();
+      },
+      { once: true }
+    );
+  });
+}
+
+function nativeHlsProxyUrl(url) {
+  const proxyUrl = new URL(HLS_PROXY_PATH, window.location.href);
+  proxyUrl.searchParams.set("kind", "playlist");
+  proxyUrl.searchParams.set("url", url);
+  proxyUrl.searchParams.set("v", String(Date.now()));
+  return proxyUrl.toString();
 }
 
 function queuePlaybackIntent() {
@@ -672,7 +817,7 @@ function renderSources(channel) {
     button.disabled = false;
     button.addEventListener("click", () => selectSource(index));
     const protocol = source.url.startsWith("https://") ? "HTTPS" : "HTTP";
-    const protocolLabel = shouldProxyHlsSource(source) ? `${protocol} 代理` : protocol;
+    const protocolLabel = shouldUseNativeHlsProxy(source) ? `${protocol} 手机代理` : shouldProxyHlsSource(source) ? `${protocol} 代理` : protocol;
     const stateLabel = failed ? "本轮失败" : source.status === "ok" ? "可用" : source.status === "bad" ? "较慢" : "未知";
     button.innerHTML = `
       <span>${index >= SOURCE_BUTTON_LIMIT ? "备用" : "线路"} ${index + 1}</span>
@@ -795,6 +940,7 @@ function prepareNativeAirPlaySource(channel, source) {
   }
 
   suppressPauseTracking();
+  clearNativePlaylistObjectUrl();
   player.removeAttribute("src");
   player.load();
   player.src = source.url;
@@ -928,8 +1074,27 @@ function shouldProxyHlsSource(source) {
 
 function shouldUseNativeHls(source) {
   if (!player.canPlayType("application/vnd.apple.mpegurl")) return false;
+  if (shouldUseNativeHlsProxy(source)) return true;
   if (canUseNativeAirPlay()) return true;
   return !shouldProxyHlsSource(source);
+}
+
+function shouldUseNativeHlsProxy(source) {
+  return (
+    window.location.protocol === "https:" &&
+    source?.url?.startsWith("http://") &&
+    !isDirectMediaSource(source) &&
+    isMobileNativeHlsBrowser() &&
+    !Boolean(window.Hls?.isSupported?.())
+  );
+}
+
+function isMobileNativeHlsBrowser() {
+  const userAgent = window.navigator?.userAgent || "";
+  const platform = window.navigator?.platform || "";
+  const maxTouchPoints = window.navigator?.maxTouchPoints || 0;
+  const isiOS = /iPad|iPhone|iPod/.test(userAgent) || (platform === "MacIntel" && maxTouchPoints > 1);
+  return isiOS && Boolean(player.canPlayType("application/vnd.apple.mpegurl"));
 }
 
 function canUseNativeAirPlay() {
