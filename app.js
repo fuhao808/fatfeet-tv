@@ -196,6 +196,8 @@ function loadCurrentSource({ autoplay = true } = {}) {
     state.hls.destroy();
     state.hls = null;
   }
+  player.removeAttribute("src");
+  player.load();
 
   if (isDirectMediaSource(source)) {
     player.src = source.url;
@@ -213,6 +215,7 @@ function loadCurrentSource({ autoplay = true } = {}) {
     state.hls.loadSource(source.url);
     state.hls.attachMedia(player);
     state.hls.on(window.Hls.Events.ERROR, (_, data) => {
+      console.warn("HLS playback error", data);
       if (data?.fatal) handleFatalHlsError(data);
     });
   } else {
