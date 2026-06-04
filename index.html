@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#07090c" />
     <title>FatFeet TV</title>
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=20260604-4" />
+    <link rel="stylesheet" href="./styles.css?v=20260604-6" />
   </head>
   <body>
     <main class="tv-shell" id="app">
@@ -34,6 +34,11 @@
               x-webkit-airplay="allow"
               disablepictureinpicture="false"
             ></video>
+            <button class="play-overlay" id="playOverlay" type="button" aria-label="播放" title="播放">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 5.5v13l10-6.5-10-6.5Z" />
+              </svg>
+            </button>
             <div class="view-mode-controls" aria-label="视频显示模式">
               <button
                 class="view-mode-button"
@@ -179,6 +184,6 @@
     </main>
 
     <script src="./hls.min.js?v=20260604-4"></script>
-    <script src="./app.js?v=20260604-5" type="module"></script>
+    <script src="./app.js?v=20260604-6" type="module"></script>
   </body>
 </html>

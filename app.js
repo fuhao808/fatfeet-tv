@@ -18,6 +18,7 @@ const CHANNEL_CATEGORIES = [
 
 const player = document.querySelector("#player");
 const videoFrame = document.querySelector(".video-frame");
+const playOverlay = document.querySelector("#playOverlay");
 const channelList = document.querySelector("#channelList");
 const channelName = document.querySelector("#channelName");
 const programName = document.querySelector("#programName");
@@ -66,6 +67,7 @@ const state = {
   autoplayRequested: false,
   userPaused: false,
   suppressPauseTrackingUntil: 0,
+  pendingPlayIntentUntil: 0,
   guideQuery: "",
   guideCategory: "all",
   libraryQuery: "",
@@ -119,29 +121,35 @@ function bindControls() {
   player.addEventListener("canplay", notePlaybackProgress);
   player.addEventListener("progress", notePlaybackProgress);
   player.addEventListener("timeupdate", notePlaybackProgress);
+  player.addEventListener("click", () => {
+    if (player.paused) queuePlaybackIntent();
+  });
+  player.addEventListener("keydown", (event) => {
+    if (player.paused && [" ", "Enter", "k", "K"].includes(event.key)) queuePlaybackIntent();
+  });
   player.addEventListener("play", () => {
-    if (isPauseTrackingSuppressed()) return;
-    state.userPaused = false;
-    state.autoplayRequested = true;
+    markPlaybackWanted();
+    syncPlayOverlay();
   });
   player.addEventListener("pause", () => {
     if (isPauseTrackingSuppressed()) return;
     state.userPaused = true;
     state.autoplayRequested = false;
+    state.pendingPlayIntentUntil = 0;
     clearRecoveryTimer();
     setStatus("已暂停", "warn");
     sourceHealth.textContent = `线路 ${state.sourceIndex + 1} 暂停`;
+    syncPlayOverlay();
   });
   player.addEventListener("playing", () => {
-    if (!isPauseTrackingSuppressed()) {
-      state.userPaused = false;
-      state.autoplayRequested = true;
-    }
+    markPlaybackWanted({ watchStartup: false });
     notePlaybackProgress();
     clearRecoveryTimer();
     setStatus("播放中", "good");
+    syncPlayOverlay();
   });
 
+  playOverlay.addEventListener("click", queuePlaybackIntent);
   castButton.addEventListener("click", startCasting);
   castCloseButton.addEventListener("click", () => closeCastPanel());
   castModal.addEventListener("click", (event) => {
@@ -278,13 +286,15 @@ function loadCurrentSource({ autoplay = true } = {}) {
   if (shouldAutoplay) {
     player.play().catch(() => {
       setStatus("点击播放按钮开始", "warn");
+      syncPlayOverlay();
     });
   }
+  syncPlayOverlay();
 }
 
 function scheduleSourceRecovery(message, options = {}) {
   if (state.userPaused) return;
-  if (!options.force && player.paused && !hasPlaybackStarted()) return;
+  if (!options.force && player.paused && !hasPlaybackStarted() && !hasPendingPlayIntent()) return;
   clearRecoveryTimer();
   setStatus(message, "warn");
   sourceHealth.textContent = `线路 ${state.sourceIndex + 1} 缓冲`;
@@ -378,6 +388,41 @@ function clearRecoveryTimer() {
     window.clearTimeout(state.recoveryTimer);
     state.recoveryTimer = null;
   }
+}
+
+function queuePlaybackIntent() {
+  markPlaybackWanted({ attemptPlay: true });
+}
+
+function markPlaybackWanted({ attemptPlay = false, watchStartup = true } = {}) {
+  state.userPaused = false;
+  state.autoplayRequested = true;
+  state.pendingPlayIntentUntil = Date.now() + FATAL_RECOVERY_DELAY_MS + 1500;
+
+  if (attemptPlay && player.paused && typeof player.play === "function") {
+    player.play().catch(() => {
+      setStatus("点击播放按钮开始", "warn");
+      syncPlayOverlay();
+    });
+  }
+
+  if (watchStartup && !state.recoveryTimer) {
+    state.recoveryTimer = window.setTimeout(() => {
+      if (!state.userPaused && !hasPlaybackStarted() && hasPendingPlayIntent()) {
+        recoverCurrentSourceOrSwitch("播放没有启动");
+      }
+    }, FATAL_RECOVERY_DELAY_MS);
+  }
+
+  syncPlayOverlay();
+}
+
+function hasPendingPlayIntent() {
+  return Date.now() < state.pendingPlayIntentUntil;
+}
+
+function syncPlayOverlay() {
+  playOverlay.hidden = !player.paused;
 }
 
 function suppressPauseTracking(durationMs = 900) {

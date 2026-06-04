@@ -91,6 +91,46 @@ button {
   object-fit: contain;
 }
 
+.play-overlay {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  left: 50%;
+  width: 68px;
+  height: 68px;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 50%;
+  background: rgba(4, 6, 9, 0.72);
+  color: var(--text);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(16px);
+  cursor: pointer;
+}
+
+.play-overlay svg {
+  width: 34px;
+  height: 34px;
+  margin-left: 4px;
+  fill: currentColor;
+}
+
+.play-overlay:hover,
+.play-overlay:focus-visible {
+  outline: 0;
+  border-color: rgba(166, 255, 203, 0.72);
+  background: rgba(18, 28, 22, 0.82);
+  color: var(--accent-2);
+}
+
+.play-overlay:focus-visible {
+  box-shadow:
+    0 0 0 3px rgba(78, 229, 139, 0.5),
+    0 18px 46px rgba(0, 0, 0, 0.42);
+}
+
 .view-mode-controls {
   position: absolute;
   z-index: 6;
@@ -937,6 +977,16 @@ body.view-page-maximized .view-mode-controls {
 
   .video-frame {
     border-radius: 6px;
+  }
+
+  .play-overlay {
+    width: 56px;
+    height: 56px;
+  }
+
+  .play-overlay svg {
+    width: 28px;
+    height: 28px;
   }
 
   .view-mode-controls {
