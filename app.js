@@ -36,6 +36,7 @@ const libraryCloseButton = document.querySelector("#libraryCloseButton");
 const librarySearch = document.querySelector("#librarySearch");
 const libraryTabs = document.querySelector("#libraryTabs");
 const libraryList = document.querySelector("#libraryList");
+const castButton = document.querySelector("#castButton");
 const pageMaxButton = document.querySelector("#pageMaxButton");
 const theaterButton = document.querySelector("#theaterButton");
 const systemFullscreenButton = document.querySelector("#systemFullscreenButton");
@@ -111,6 +112,7 @@ function bindControls() {
     setStatus("播放中", "good");
   });
 
+  castButton.addEventListener("click", startCasting);
   pageMaxButton.addEventListener("click", togglePageMaximized);
   theaterButton.addEventListener("click", toggleTheaterMode);
   systemFullscreenButton.addEventListener("click", toggleSystemFullscreen);
@@ -588,6 +590,38 @@ function openLibrary(open) {
   }
 }
 
+async function startCasting() {
+  const channel = state.channels[state.channelIndex];
+  const source = getChannelSources(channel)[state.sourceIndex];
+
+  if (typeof player.webkitShowPlaybackTargetPicker === "function") {
+    try {
+      player.webkitShowPlaybackTargetPicker();
+      showToast("选择 AirPlay 设备");
+      setStatus("正在打开投屏", "warn");
+      return;
+    } catch {
+      // Continue to the standard remote playback API.
+    }
+  }
+
+  if (player.remote?.prompt) {
+    try {
+      await player.remote.prompt();
+      showToast("选择投屏设备");
+      setStatus("正在打开投屏", "warn");
+      return;
+    } catch {
+      // Fall through to the playlist fallback.
+    }
+  }
+
+  const playlistUrl = new URL("./playlist.m3u", window.location.href).toString();
+  const copied = await copyText(playlistUrl);
+  showToast(copied ? "已复制播放列表链接" : "请在电视 App 添加播放列表");
+  setStatus(source?.url ? "当前浏览器不支持网页投屏" : "请先选择频道", "warn");
+}
+
 function togglePageMaximized() {
   state.pageMaximized = !state.pageMaximized;
   if (state.pageMaximized && state.libraryOpen) openLibrary(false);
@@ -776,6 +810,16 @@ function resolveUrl(value, baseUrl) {
     return new URL(value, baseUrl).toString();
   } catch {
     return value;
+  }
+}
+
+async function copyText(value) {
+  try {
+    if (!navigator.clipboard?.writeText) return false;
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    return false;
   }
 }
 
