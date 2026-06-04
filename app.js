@@ -335,7 +335,7 @@ function recoverCurrentSourceOrSwitch(message) {
     return;
   }
 
-  if (hasRecentProgress()) {
+  if (!player.paused && hasRecentProgress()) {
     clearRecoveryTimer();
     setStatus("播放中", "good");
     sourceHealth.textContent = `线路 ${state.sourceIndex + 1}`;
@@ -363,6 +363,7 @@ function recoverCurrentSourceOrSwitch(message) {
 }
 
 function recoveryDelayForCurrentState() {
+  if (player.paused && hasPendingPlayIntent()) return FATAL_RECOVERY_DELAY_MS;
   return hasPlaybackStarted() ? PLAYBACK_STALL_DELAY_MS : STARTUP_RECOVERY_DELAY_MS;
 }
 
@@ -408,7 +409,7 @@ function markPlaybackWanted({ attemptPlay = false, watchStartup = true } = {}) {
 
   if (watchStartup && !state.recoveryTimer) {
     state.recoveryTimer = window.setTimeout(() => {
-      if (!state.userPaused && !hasPlaybackStarted() && hasPendingPlayIntent()) {
+      if (!state.userPaused && hasPendingPlayIntent() && (player.paused || !hasPlaybackStarted())) {
         recoverCurrentSourceOrSwitch("播放没有启动");
       }
     }, FATAL_RECOVERY_DELAY_MS);
