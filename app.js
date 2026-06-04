@@ -43,16 +43,6 @@ const librarySearch = document.querySelector("#librarySearch");
 const libraryTabs = document.querySelector("#libraryTabs");
 const libraryList = document.querySelector("#libraryList");
 const castButton = document.querySelector("#castButton");
-const castModal = document.querySelector("#castModal");
-const castCloseButton = document.querySelector("#castCloseButton");
-const castChannelTitle = document.querySelector("#castChannelTitle");
-const castSourceTitle = document.querySelector("#castSourceTitle");
-const castPlaylistUrl = document.querySelector("#castPlaylistUrl");
-const castSourceUrl = document.querySelector("#castSourceUrl");
-const airplayButton = document.querySelector("#airplayButton");
-const copyPlaylistButton = document.querySelector("#copyPlaylistButton");
-const copySourceButton = document.querySelector("#copySourceButton");
-const openPlaylistLink = document.querySelector("#openPlaylistLink");
 const pageMaxButton = document.querySelector("#pageMaxButton");
 const theaterButton = document.querySelector("#theaterButton");
 const systemFullscreenButton = document.querySelector("#systemFullscreenButton");
@@ -81,7 +71,6 @@ const state = {
   libraryQuery: "",
   libraryCategory: "all",
   libraryOpen: false,
-  castOpen: false,
   pageMaximized: false,
   theaterMode: false,
   initialized: false
@@ -162,13 +151,6 @@ function bindControls() {
   muteButton.addEventListener("click", toggleMuted);
   volumeSlider.addEventListener("input", updateVolumeFromSlider);
   castButton.addEventListener("click", startCasting);
-  castCloseButton.addEventListener("click", () => closeCastPanel());
-  castModal.addEventListener("click", (event) => {
-    if (event.target === castModal) closeCastPanel();
-  });
-  airplayButton.addEventListener("click", startNativeAirPlay);
-  copyPlaylistButton.addEventListener("click", copyPlaylistLink);
-  copySourceButton.addEventListener("click", copyCurrentSourceLink);
   pageMaxButton.addEventListener("click", togglePageMaximized);
   theaterButton.addEventListener("click", toggleTheaterMode);
   systemFullscreenButton.addEventListener("click", toggleSystemFullscreen);
@@ -191,10 +173,6 @@ function bindControls() {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    if (state.castOpen) {
-      closeCastPanel();
-      return;
-    }
     if (state.libraryOpen) {
       openLibrary(false);
       return;
@@ -224,7 +202,6 @@ function tuneTo(index, options = {}) {
   if (state.libraryOpen) renderLibrary();
   renderSchedule(channel);
   renderSources(channel);
-  if (state.castOpen) updateCastPanel();
   loadCurrentSource(options);
   showToast(channel.name);
 }
@@ -686,7 +663,6 @@ function selectSource(index) {
   setStatus(`切换到线路 ${index + 1}`, "warn");
   showToast(`线路 ${index + 1}`);
   if (state.libraryOpen) renderLibrary();
-  if (state.castOpen) updateCastPanel();
   loadCurrentSource({ autoplay: true });
 }
 
@@ -916,75 +892,61 @@ function openLibrary(open) {
 async function startCasting() {
   const channel = state.channels[state.channelIndex];
   const source = getChannelSources(channel)[state.sourceIndex];
-  if (canUseNativeAirPlay() && canDirectAirPlaySource(source)) {
+
+  if (!source?.url) {
+    setStatus("请先选择频道", "warn");
+    showToast("请先选择频道");
+    return;
+  }
+
+  if (canUseNativeAirPlay()) {
     await startNativeAirPlay();
     return;
   }
 
-  openCastPanel();
-  const copied = await copyPlaylistLink({ silent: true });
-  showToast(copied ? "已复制电视播放列表" : "电视播放列表");
-  setStatus(canUseNativeAirPlay() ? "请选择电视播放方式" : copied ? "电视播放列表已复制" : "请复制电视播放列表", "warn");
-}
+  if (await startRemotePlayback()) return;
 
-function openCastPanel() {
-  updateCastPanel();
-  state.castOpen = true;
-  castModal.hidden = false;
-  document.body.classList.add("cast-open");
-  copyPlaylistButton.focus();
-}
-
-function closeCastPanel() {
-  state.castOpen = false;
-  castModal.hidden = true;
-  document.body.classList.remove("cast-open");
-  castButton.focus();
-}
-
-function updateCastPanel() {
-  const channel = state.channels[state.channelIndex];
-  const source = getChannelSources(channel)[state.sourceIndex];
-  const playlistUrl = getPlaylistUrl();
-  const sourceUrl = source?.url || "";
-
-  castChannelTitle.textContent = channel?.name || "-";
-  castSourceTitle.textContent = source ? `线路 ${state.sourceIndex + 1} · ${source.origin || "来源"}` : "-";
-  castPlaylistUrl.value = playlistUrl;
-  castSourceUrl.value = sourceUrl;
-  openPlaylistLink.href = playlistUrl;
-  airplayButton.hidden = !canUseNativeAirPlay();
-  airplayButton.disabled = !sourceUrl || !canUseNativeAirPlay();
-  copySourceButton.disabled = !sourceUrl;
+  setStatus("当前浏览器没有可用投屏", "warn");
+  showToast("请用 Safari AirPlay 或系统屏幕镜像");
 }
 
 async function startNativeAirPlay() {
   const channel = state.channels[state.channelIndex];
   const source = getChannelSources(channel)[state.sourceIndex];
   if (!source?.url) {
-    openCastPanel();
     setStatus("请先选择频道", "warn");
     showToast("请先选择频道");
     return;
   }
 
   if (!canUseNativeAirPlay()) {
-    openCastPanel();
     setStatus("当前浏览器不支持 AirPlay", "warn");
-    showToast("请用 Safari 或电视 App");
+    showToast("请用 Safari AirPlay");
     return;
   }
 
   try {
     prepareNativeAirPlaySource(channel, source);
-    if (state.castOpen) closeCastPanel();
     setStatus("正在打开 AirPlay", "warn");
     showToast("选择 AirPlay 设备");
     player.webkitShowPlaybackTargetPicker();
   } catch {
-    openCastPanel();
     setStatus("AirPlay 打开失败", "warn");
-    showToast("可用 M3U 在电视端播放");
+    showToast("请试系统屏幕镜像");
+  }
+}
+
+async function startRemotePlayback() {
+  if (typeof player.remote?.prompt !== "function") return false;
+
+  try {
+    setStatus("正在打开投屏", "warn");
+    showToast("选择投屏设备");
+    await player.remote.prompt();
+    return true;
+  } catch (error) {
+    console.warn("Remote playback unavailable", error);
+    return false;
   }
 }
 
@@ -1013,35 +975,6 @@ function prepareNativeAirPlaySource(channel, source) {
   player.play().catch(() => {
     setStatus("请选择 AirPlay 设备", "warn");
   });
-}
-
-async function copyPlaylistLink(options = {}) {
-  const playlistUrl = getPlaylistUrl();
-  const copied = await copyText(playlistUrl);
-  if (!options.silent) {
-    showToast(copied ? "已复制播放列表" : "请选择播放列表链接");
-    setStatus(copied ? "播放列表已复制" : "复制失败", copied ? "good" : "warn");
-  }
-  return copied;
-}
-
-async function copyCurrentSourceLink() {
-  const channel = state.channels[state.channelIndex];
-  const source = getChannelSources(channel)[state.sourceIndex];
-  if (!source?.url) {
-    showToast("请先选择频道");
-    setStatus("请先选择频道", "warn");
-    return false;
-  }
-
-  const copied = await copyText(source.url);
-  showToast(copied ? "已复制当前线路" : "请选择当前线路链接");
-  setStatus(copied ? "当前线路已复制" : "复制失败", copied ? "good" : "warn");
-  return copied;
-}
-
-function getPlaylistUrl() {
-  return new URL("./playlist.m3u", window.location.href).toString();
 }
 
 function togglePageMaximized() {
@@ -1270,33 +1203,6 @@ function resolveUrl(value, baseUrl) {
     return new URL(value, baseUrl).toString();
   } catch {
     return value;
-  }
-}
-
-async function copyText(value) {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
-      return true;
-    }
-  } catch {
-    // Try the legacy clipboard path below.
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.top = "-999px";
-  document.body.appendChild(textarea);
-  textarea.select();
-
-  try {
-    return document.execCommand("copy");
-  } catch {
-    return false;
-  } finally {
-    textarea.remove();
   }
 }
 
