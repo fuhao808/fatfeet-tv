@@ -39,8 +39,8 @@
                 class="view-mode-button"
                 id="castButton"
                 type="button"
-                aria-label="投屏"
-                title="投屏"
+                aria-label="电视播放"
+                title="电视播放"
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v9A2.5 2.5 0 0 1 17.5 18H15v-2h2.5a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-11a.5.5 0 0 0-.5.5V9H4V6.5Zm0 6.5a7 7 0 0 1 7 7H8a4 4 0 0 0-4-4v-3Zm0 4a3 3 0 0 1 3 3H4v-3Zm0-8a11 11 0 0 1 11 11h-3A8 8 0 0 0 4 12V9Z" />
@@ -139,9 +139,45 @@
           <div class="library-list" id="libraryList"></div>
         </div>
       </section>
+
+      <section class="cast-modal" id="castModal" hidden aria-label="电视播放">
+        <div class="cast-panel" role="dialog" aria-modal="true" aria-labelledby="castTitle">
+          <div class="cast-head">
+            <div>
+              <p>电视播放</p>
+              <h2 id="castTitle">播放列表</h2>
+            </div>
+            <button class="close-button" id="castCloseButton" type="button">关闭</button>
+          </div>
+          <div class="cast-summary">
+            <div>
+              <span>频道</span>
+              <strong id="castChannelTitle">-</strong>
+            </div>
+            <div>
+              <span>线路</span>
+              <strong id="castSourceTitle">-</strong>
+            </div>
+          </div>
+          <label class="cast-link">
+            <span>播放列表</span>
+            <input id="castPlaylistUrl" type="text" readonly />
+          </label>
+          <label class="cast-link">
+            <span>当前线路</span>
+            <input id="castSourceUrl" type="text" readonly />
+          </label>
+          <div class="cast-actions">
+            <button class="refresh-button" id="copyPlaylistButton" type="button">复制列表</button>
+            <button class="secondary-button" id="copySourceButton" type="button">复制线路</button>
+            <a class="secondary-button" id="openPlaylistLink" href="./playlist.m3u" target="_blank" rel="noreferrer">打开 M3U</a>
+          </div>
+          <p class="cast-note">网页 AirPlay 在代理直播线路上可能只有声音，电视端建议加载 M3U。</p>
+        </div>
+      </section>
     </main>
 
-    <script src="./hls.min.js?v=20260604-2"></script>
-    <script src="./app.js?v=20260604-2" type="module"></script>
+    <script src="./hls.min.js?v=20260604-3"></script>
+    <script src="./app.js?v=20260604-3" type="module"></script>
   </body>
 </html>

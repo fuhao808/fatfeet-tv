@@ -37,6 +37,15 @@ const librarySearch = document.querySelector("#librarySearch");
 const libraryTabs = document.querySelector("#libraryTabs");
 const libraryList = document.querySelector("#libraryList");
 const castButton = document.querySelector("#castButton");
+const castModal = document.querySelector("#castModal");
+const castCloseButton = document.querySelector("#castCloseButton");
+const castChannelTitle = document.querySelector("#castChannelTitle");
+const castSourceTitle = document.querySelector("#castSourceTitle");
+const castPlaylistUrl = document.querySelector("#castPlaylistUrl");
+const castSourceUrl = document.querySelector("#castSourceUrl");
+const copyPlaylistButton = document.querySelector("#copyPlaylistButton");
+const copySourceButton = document.querySelector("#copySourceButton");
+const openPlaylistLink = document.querySelector("#openPlaylistLink");
 const pageMaxButton = document.querySelector("#pageMaxButton");
 const theaterButton = document.querySelector("#theaterButton");
 const systemFullscreenButton = document.querySelector("#systemFullscreenButton");
@@ -59,6 +68,7 @@ const state = {
   libraryQuery: "",
   libraryCategory: "all",
   libraryOpen: false,
+  castOpen: false,
   pageMaximized: false,
   theaterMode: false,
   initialized: false
@@ -113,6 +123,12 @@ function bindControls() {
   });
 
   castButton.addEventListener("click", startCasting);
+  castCloseButton.addEventListener("click", () => closeCastPanel());
+  castModal.addEventListener("click", (event) => {
+    if (event.target === castModal) closeCastPanel();
+  });
+  copyPlaylistButton.addEventListener("click", copyPlaylistLink);
+  copySourceButton.addEventListener("click", copyCurrentSourceLink);
   pageMaxButton.addEventListener("click", togglePageMaximized);
   theaterButton.addEventListener("click", toggleTheaterMode);
   systemFullscreenButton.addEventListener("click", toggleSystemFullscreen);
@@ -135,6 +151,10 @@ function bindControls() {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
+    if (state.castOpen) {
+      closeCastPanel();
+      return;
+    }
     if (state.libraryOpen) {
       openLibrary(false);
       return;
@@ -162,6 +182,7 @@ function tuneTo(index, options = {}) {
   if (state.libraryOpen) renderLibrary();
   renderSchedule(channel);
   renderSources(channel);
+  if (state.castOpen) updateCastPanel();
   loadCurrentSource(options);
   showToast(channel.name);
 }
@@ -364,6 +385,7 @@ function selectSource(index) {
   setStatus(`切换到线路 ${index + 1}`, "warn");
   showToast(`线路 ${index + 1}`);
   if (state.libraryOpen) renderLibrary();
+  if (state.castOpen) updateCastPanel();
   loadCurrentSource({ autoplay: true });
 }
 
@@ -591,35 +613,68 @@ function openLibrary(open) {
 }
 
 async function startCasting() {
+  openCastPanel();
+  const copied = await copyPlaylistLink({ silent: true });
+  showToast(copied ? "已复制电视播放列表" : "电视播放列表");
+  setStatus(copied ? "电视播放列表已复制" : "请复制电视播放列表", "warn");
+}
+
+function openCastPanel() {
+  updateCastPanel();
+  state.castOpen = true;
+  castModal.hidden = false;
+  document.body.classList.add("cast-open");
+  copyPlaylistButton.focus();
+}
+
+function closeCastPanel() {
+  state.castOpen = false;
+  castModal.hidden = true;
+  document.body.classList.remove("cast-open");
+  castButton.focus();
+}
+
+function updateCastPanel() {
   const channel = state.channels[state.channelIndex];
   const source = getChannelSources(channel)[state.sourceIndex];
+  const playlistUrl = getPlaylistUrl();
+  const sourceUrl = source?.url || "";
 
-  if (typeof player.webkitShowPlaybackTargetPicker === "function") {
-    try {
-      player.webkitShowPlaybackTargetPicker();
-      showToast("选择 AirPlay 设备");
-      setStatus("正在打开投屏", "warn");
-      return;
-    } catch {
-      // Continue to the standard remote playback API.
-    }
-  }
+  castChannelTitle.textContent = channel?.name || "-";
+  castSourceTitle.textContent = source ? `线路 ${state.sourceIndex + 1} · ${source.origin || "来源"}` : "-";
+  castPlaylistUrl.value = playlistUrl;
+  castSourceUrl.value = sourceUrl;
+  openPlaylistLink.href = playlistUrl;
+  copySourceButton.disabled = !sourceUrl;
+}
 
-  if (player.remote?.prompt) {
-    try {
-      await player.remote.prompt();
-      showToast("选择投屏设备");
-      setStatus("正在打开投屏", "warn");
-      return;
-    } catch {
-      // Fall through to the playlist fallback.
-    }
-  }
-
-  const playlistUrl = new URL("./playlist.m3u", window.location.href).toString();
+async function copyPlaylistLink(options = {}) {
+  const playlistUrl = getPlaylistUrl();
   const copied = await copyText(playlistUrl);
-  showToast(copied ? "已复制播放列表链接" : "请在电视 App 添加播放列表");
-  setStatus(source?.url ? "当前浏览器不支持网页投屏" : "请先选择频道", "warn");
+  if (!options.silent) {
+    showToast(copied ? "已复制播放列表" : "请选择播放列表链接");
+    setStatus(copied ? "播放列表已复制" : "复制失败", copied ? "good" : "warn");
+  }
+  return copied;
+}
+
+async function copyCurrentSourceLink() {
+  const channel = state.channels[state.channelIndex];
+  const source = getChannelSources(channel)[state.sourceIndex];
+  if (!source?.url) {
+    showToast("请先选择频道");
+    setStatus("请先选择频道", "warn");
+    return false;
+  }
+
+  const copied = await copyText(source.url);
+  showToast(copied ? "已复制当前线路" : "请选择当前线路链接");
+  setStatus(copied ? "当前线路已复制" : "复制失败", copied ? "good" : "warn");
+  return copied;
+}
+
+function getPlaylistUrl() {
+  return new URL("./playlist.m3u", window.location.href).toString();
 }
 
 function togglePageMaximized() {
@@ -815,11 +870,28 @@ function resolveUrl(value, baseUrl) {
 
 async function copyText(value) {
   try {
-    if (!navigator.clipboard?.writeText) return false;
-    await navigator.clipboard.writeText(value);
-    return true;
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    // Try the legacy clipboard path below.
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    return document.execCommand("copy");
   } catch {
     return false;
+  } finally {
+    textarea.remove();
   }
 }
 
