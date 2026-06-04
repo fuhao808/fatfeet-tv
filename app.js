@@ -21,6 +21,9 @@ const CHANNEL_CATEGORIES = [
 const player = document.querySelector("#player");
 const videoFrame = document.querySelector(".video-frame");
 const playOverlay = document.querySelector("#playOverlay");
+const playPauseButton = document.querySelector("#playPauseButton");
+const muteButton = document.querySelector("#muteButton");
+const volumeSlider = document.querySelector("#volumeSlider");
 const channelList = document.querySelector("#channelList");
 const channelName = document.querySelector("#channelName");
 const programName = document.querySelector("#programName");
@@ -127,9 +130,7 @@ function bindControls() {
   player.addEventListener("canplay", notePlaybackProgress);
   player.addEventListener("progress", notePlaybackProgress);
   player.addEventListener("timeupdate", notePlaybackProgress);
-  player.addEventListener("click", () => {
-    if (player.paused) queuePlaybackIntent();
-  });
+  player.addEventListener("click", togglePlayback);
   player.addEventListener("keydown", (event) => {
     if (player.paused && [" ", "Enter", "k", "K"].includes(event.key)) queuePlaybackIntent();
   });
@@ -154,8 +155,12 @@ function bindControls() {
     setStatus("播放中", "good");
     syncPlayOverlay();
   });
+  player.addEventListener("volumechange", syncPlayerControls);
 
   playOverlay.addEventListener("click", queuePlaybackIntent);
+  playPauseButton.addEventListener("click", togglePlayback);
+  muteButton.addEventListener("click", toggleMuted);
+  volumeSlider.addEventListener("input", updateVolumeFromSlider);
   castButton.addEventListener("click", startCasting);
   castCloseButton.addEventListener("click", () => closeCastPanel());
   castModal.addEventListener("click", (event) => {
@@ -197,6 +202,7 @@ function bindControls() {
     if (state.pageMaximized) togglePageMaximized();
   });
   applyViewModeState();
+  syncPlayerControls();
 }
 
 function tuneTo(index, options = {}) {
@@ -541,6 +547,15 @@ function queuePlaybackIntent() {
   markPlaybackWanted({ attemptPlay: true });
 }
 
+function togglePlayback() {
+  if (player.paused) {
+    queuePlaybackIntent();
+    return;
+  }
+
+  player.pause();
+}
+
 function markPlaybackWanted({ attemptPlay = false, watchStartup = true } = {}) {
   state.userPaused = false;
   state.autoplayRequested = true;
@@ -570,6 +585,50 @@ function hasPendingPlayIntent() {
 
 function syncPlayOverlay() {
   playOverlay.hidden = !player.paused;
+  syncPlayerControls();
+}
+
+function toggleMuted() {
+  player.muted = !player.muted;
+  if (!player.muted && Number(volumeSlider.value) === 0) {
+    setPlayerVolume(0.7);
+    volumeSlider.value = "0.7";
+  }
+  syncPlayerControls();
+}
+
+function updateVolumeFromSlider() {
+  const value = Number(volumeSlider.value);
+  if (Number.isFinite(value)) {
+    setPlayerVolume(value);
+    player.muted = value === 0;
+  }
+  syncPlayerControls();
+}
+
+function setPlayerVolume(value) {
+  try {
+    player.volume = clamp(value, 0, 1);
+  } catch {
+    // Some mobile browsers keep volume under hardware control.
+  }
+}
+
+function syncPlayerControls() {
+  const isPlaying = !player.paused;
+  const isMuted = player.muted || player.volume === 0;
+
+  playPauseButton.classList.toggle("is-playing", isPlaying);
+  playPauseButton.setAttribute("aria-label", isPlaying ? "暂停" : "播放");
+  playPauseButton.title = isPlaying ? "暂停" : "播放";
+
+  muteButton.classList.toggle("is-muted", isMuted);
+  muteButton.setAttribute("aria-label", isMuted ? "取消静音" : "静音");
+  muteButton.title = isMuted ? "取消静音" : "静音";
+
+  if (Number(volumeSlider.value) !== player.volume) {
+    volumeSlider.value = String(player.volume);
+  }
 }
 
 function suppressPauseTracking(durationMs = 900) {
