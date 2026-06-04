@@ -1,0 +1,127 @@
+[
+  {
+    "name": "CCTV-5 PublicIPTV",
+    "origin": "PublicIPTV",
+    "url": "http://123.175.209.52:9003/hls/5/index.m3u8"
+  },
+  {
+    "name": "CCTV-5 Tonkiang 111.26",
+    "origin": "Tonkiang",
+    "url": "http://111.26.109.81:9003/hls/5/index.m3u8"
+  },
+  {
+    "name": "CCTV-5 KKiTV",
+    "origin": "Tonkiang",
+    "url": "http://api.kkitv.itv888.cn:8080/hls/7vx0ia55les/index.m3u8"
+  },
+  {
+    "name": "CCTV-5 HAUE",
+    "origin": "HAUE",
+    "url": "http://v.mp.haue.edu.cn/hls/cctv5hd.m3u8"
+  },
+  {
+    "name": "CCTV-5 CM 117",
+    "origin": "ChinaMobile",
+    "url": "http://117.148.179.142/PLTV/88888888/224/3221232440/index.m3u8"
+  },
+  {
+    "name": "CCTV-5 CM 39.135",
+    "origin": "ChinaMobile",
+    "url": "http://39.135.138.60:18890/PLTV/88888910/224/3221225633/index.m3u8"
+  },
+  {
+    "name": "CCTV-5 MiGu Proxy",
+    "origin": "MiGu",
+    "url": "http://112.74.200.9:88/tv000000/m3u8.php?/migu/641886683/01.m3u8"
+  },
+  {
+    "name": "CCTV-5 CM TVOD",
+    "origin": "ChinaMobile",
+    "url": "http://39.135.138.60:18890/TVOD/88888910/224/3221226230/index.m3u8"
+  },
+  {
+    "name": "CCTV-5 CNTV 183",
+    "origin": "CNTV",
+    "url": "http://183.207.248.71:80/cntv/live1/CCTV-5/cctv-5"
+  },
+  {
+    "name": "CCTV-5 HL ChinaMobile",
+    "origin": "ChinaMobile",
+    "url": "http://ottrrs.hl.chinamobile.com/PLTV/88888888/224/3221226019/index.m3u8"
+  },
+  {
+    "name": "CCTV-5 111.63",
+    "origin": "ChinaMobile",
+    "url": "http://111.63.117.13:6060/030000001000/CCTV-5/CCTV-5.m3u8"
+  },
+  {
+    "name": "CCTV-5 39.135.34",
+    "origin": "ChinaMobile",
+    "url": "http://39.135.34.150:8080/000000001000/1000000001000004794/1.m3u8?xtkg"
+  },
+  {
+    "name": "CCTV-5 223.82",
+    "origin": "GitHub Gist",
+    "url": "http://223.82.250.72/live/cctv-5/1.m3u8"
+  },
+  {
+    "name": "CCTV-5 39.134.115",
+    "origin": "GitHub Gist",
+    "url": "http://39.134.115.163:8080/PLTV/88888910/224/3221225633/index.m3u8"
+  },
+  {
+    "name": "CCTV-5 39.134.66",
+    "origin": "Reddit/Gist",
+    "url": "http://39.134.66.66/PLTV/88888888/224/3221225818/index.m3u8"
+  },
+  {
+    "name": "CCTV-5 OleLive",
+    "origin": "OleLive",
+    "url": "https://api.olelive.com/dis/live/CCTV5HD/hls.m3u8"
+  },
+  {
+    "name": "CCTV-5 EPGPW 3fff",
+    "origin": "EPG.pw",
+    "url": "https://epg.pw/stream/3fff25613ac0ffd3d4adb549719315b585868cbe225e9aecfe6917eee97ab492.m3u8"
+  },
+  {
+    "name": "CCTV-5 EPGPW ed02",
+    "origin": "EPG.pw",
+    "url": "https://epg.pw/stream/ed02b8de7e8694705eda998a5905fbae21da95504360f6328c731da79a3a9162.m3u8"
+  },
+  {
+    "name": "CCTV-5 EPGPW c015",
+    "origin": "EPG.pw",
+    "url": "https://epg.pw/stream/c0158e20690209bcd35d35066bc9477d02d6a201a2dfd28cd7dc2261393e8724.m3u8"
+  },
+  {
+    "name": "CCTV-5 EPGPW 1fb4",
+    "origin": "EPG.pw",
+    "url": "https://epg.pw/stream/1fb410350d0e3242e8daa58e881a026638b4312e90abbb03d5ea0c06b19bbb0b.m3u8"
+  },
+  {
+    "name": "CCTV-5 EPGPW bccb",
+    "origin": "EPG.pw",
+    "url": "https://epg.pw/stream/bccb02eb83b5bcd2d2b5808a1dfcd4a7e8c48c763f312015db7a591d8be22284.m3u8"
+  },
+  {
+    "name": "CCTV-5 EPGPW aa65",
+    "origin": "EPG.pw",
+    "url": "https://epg.pw/stream/aa65062c7f1eba54aed20c9ff328bb190ea3a2a1a3eae723333a359e661ba213.m3u8"
+  },
+  {
+    "name": "CCTV-5 EPGPW 61df",
+    "origin": "EPG.pw",
+    "url": "https://epg.pw/stream/61df3be1490c927a746d671e52c9f9cb197fba5a08184c147a68eb80f84c4824.m3u8"
+  },
+  {
+    "name": "CCTV-5 EPGPW b786",
+    "origin": "EPG.pw",
+    "url": "https://epg.pw/stream/b786ec1800a5643b2d5d40858739023ccedfe27bc149fa6eee46de30f0897b5f.m3u8"
+  },
+  {
+    "name": "CCTV-5 EPGPW e94c",
+    "origin": "EPG.pw",
+    "url": "https://epg.pw/stream/e94cc2f1cb9a47e959a80ae19baa1ce8e6e04e844dfcf65aa27b641d7ee467c7.m3u8"
+  }
+]

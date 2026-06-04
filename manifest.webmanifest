@@ -1,0 +1,9 @@
+{
+  "name": "FatFeet TV 肥脚电视",
+  "short_name": "FatFeet",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#07090c",
+  "theme_color": "#07090c",
+  "icons": []
+}

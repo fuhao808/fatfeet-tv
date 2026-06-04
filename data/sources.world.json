@@ -1,0 +1,112 @@
+{
+  "description": "备用配置：世界/美国电视源。当前不作为默认列表，用于后续添加 FatFeet TV 的大 Tab：\"中国电视\" / \"世界电视\"。",
+  "sources": [
+    {
+      "name": "Free-TV Quality",
+      "url": "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8",
+      "priority": 20,
+      "region": "us"
+    },
+    {
+      "name": "IPTV org United States",
+      "url": "https://iptv-org.github.io/iptv/countries/us.m3u",
+      "priority": 18,
+      "region": "us"
+    },
+    {
+      "name": "IPTV org English",
+      "url": "https://iptv-org.github.io/iptv/languages/eng.m3u",
+      "priority": 14,
+      "region": "global"
+    },
+    {
+      "name": "IPTV org Chinese",
+      "url": "https://iptv-org.github.io/iptv/languages/zho.m3u",
+      "priority": 9,
+      "region": "global"
+    },
+    {
+      "name": "IPTV org China",
+      "url": "https://iptv-org.github.io/iptv/countries/cn.m3u",
+      "priority": 6,
+      "region": "cn"
+    }
+  ],
+  "preferredKeywords": [
+    "PBS",
+    "ABC",
+    "CBS",
+    "NBC",
+    "FOX",
+    "News",
+    "Weather",
+    "NASA",
+    "Bloomberg",
+    "Court TV",
+    "ION",
+    "Local",
+    "CCTV",
+    "CGTN",
+    "凤凰",
+    "TVB"
+  ],
+  "blockedKeywords": [
+    "广告",
+    "推广",
+    "引流",
+    "关注",
+    "支持",
+    "作者",
+    "app",
+    "apk",
+    "下载",
+    "群",
+    "测试",
+    "购物",
+    "radio",
+    "广播",
+    "backup",
+    "demo",
+    "斗鱼",
+    "虎牙",
+    "熊猫",
+    "bilibili",
+    "博彩",
+    "成人",
+    "xxx",
+    "bet",
+    "casino",
+    "hbo",
+    "showtime",
+    "starz",
+    "cinemax",
+    "espn",
+    "nba",
+    "nfl",
+    "mlb",
+    "ufc",
+    "disney",
+    "cartoon network",
+    "nickelodeon",
+    "national geographic",
+    "nat geo"
+  ],
+  "blockedUrlKeywords": [
+    "youtube.com/",
+    "youtu.be/",
+    "advertisingId=",
+    "ads.",
+    "appName=",
+    "appVersion=",
+    "rokuChannel"
+  ],
+  "maxChannels": 120,
+  "maxSourcesPerChannel": 3,
+  "healthCheck": {
+    "enabled": true,
+    "timeoutMs": 7000,
+    "concurrency": 10,
+    "maxSourcesToCheck": 280,
+    "minimumPlayableChannels": 40
+  }
+}

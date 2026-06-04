@@ -1,0 +1,45 @@
+{
+  "generatedAt": "manual-seed",
+  "channels": [
+    {
+      "id": "cctv-1",
+      "name": "CCTV-1",
+      "group": "央视",
+      "current": "综合频道",
+      "programs": [
+        { "time": "现在", "title": "综合直播" },
+        { "time": "稍后", "title": "新闻 / 剧场 / 专题" },
+        { "time": "全天", "title": "自动优选可用线路" }
+      ],
+      "sources": [
+        {
+          "url": "https://live.zbds.org/tv/iptv4.m3u",
+          "status": "unknown",
+          "origin": "zbds"
+        }
+      ]
+    },
+    {
+      "id": "playlist-main",
+      "name": "综合频道列表",
+      "group": "推荐",
+      "current": "打开完整 IPTV 列表",
+      "programs": [
+        { "time": "现在", "title": "完整列表" },
+        { "time": "提示", "title": "首次自动更新后会拆分为单个频道" }
+      ],
+      "sources": [
+        {
+          "url": "https://live.zbds.org/tv/iptv4.m3u",
+          "status": "unknown",
+          "origin": "ngo5/IPTV"
+        },
+        {
+          "url": "https://iptv-org.github.io/iptv/index.m3u",
+          "status": "unknown",
+          "origin": "iptv-org"
+        }
+      ]
+    }
+  ]
+}
