@@ -199,7 +199,7 @@ function loadCurrentSource({ autoplay = true } = {}) {
 
   if (isDirectMediaSource(source)) {
     player.src = source.url;
-  } else if (player.canPlayType("application/vnd.apple.mpegurl")) {
+  } else if (!proxyingHls && player.canPlayType("application/vnd.apple.mpegurl")) {
     player.src = source.url;
   } else if (window.Hls?.isSupported()) {
     state.hls = new window.Hls({
