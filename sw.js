@@ -1,4 +1,4 @@
-const CACHE_VERSION = "fatfeet-tv-hls-proxy-20260604-9";
+const CACHE_VERSION = "fatfeet-tv-hls-proxy-20260604-10";
 const HTTPS_HLS_PROXY_PREFIX = "https://api.codetabs.com/v1/proxy?quest=";
 
 self.addEventListener("install", (event) => {

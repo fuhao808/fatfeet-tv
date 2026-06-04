@@ -7,7 +7,7 @@ const FATAL_RECOVERY_DELAY_MS = 7000;
 const RECOVERY_SETTLE_MS = 18000;
 const MAX_CURRENT_SOURCE_RECOVERIES = 1;
 const HTTPS_HLS_PROXY_PREFIX = "https://api.codetabs.com/v1/proxy?quest=";
-const SERVICE_WORKER_URL = "./sw.js?v=20260604-9";
+const SERVICE_WORKER_URL = "./sw.js?v=20260604-10";
 const HLS_PROXY_PATH = "./__hls_proxy__";
 const CHANNEL_CATEGORIES = [
   { id: "all", label: "全部" },
@@ -1084,8 +1084,7 @@ function shouldUseNativeHlsProxy(source) {
     window.location.protocol === "https:" &&
     source?.url?.startsWith("http://") &&
     !isDirectMediaSource(source) &&
-    isMobileNativeHlsBrowser() &&
-    !Boolean(window.Hls?.isSupported?.())
+    isMobileNativeHlsBrowser()
   );
 }
 
