@@ -7,7 +7,7 @@ const FATAL_RECOVERY_DELAY_MS = 7000;
 const RECOVERY_SETTLE_MS = 18000;
 const MAX_CURRENT_SOURCE_RECOVERIES = 1;
 const HTTPS_HLS_PROXY_PREFIX = "https://api.codetabs.com/v1/proxy?quest=";
-const SERVICE_WORKER_URL = "./sw.js?v=20260604-10";
+const SERVICE_WORKER_URL = "./sw.js?v=20260604-12";
 const HLS_PROXY_PATH = "./__hls_proxy__";
 const CHANNEL_CATEGORIES = [
   { id: "all", label: "全部" },
@@ -251,6 +251,7 @@ async function loadCurrentSource({ autoplay = true } = {}) {
   const nativeHls = !isDirectMediaSource(source) && shouldUseNativeHls(source);
   const nativeProxyingHls = nativeHls && shouldUseNativeHlsProxy(source);
   const proxyingHls = !nativeHls && shouldProxyHlsSource(source);
+  syncAirPlayAttribute(source, nativeProxyingHls);
   const sourceMode = nativeProxyingHls ? " 手机代理" : nativeHls && canUseNativeAirPlay() ? " 原生" : proxyingHls ? " 代理" : "";
   setStatus(
     nativeProxyingHls
@@ -854,7 +855,9 @@ function openLibrary(open) {
 }
 
 async function startCasting() {
-  if (canUseNativeAirPlay()) {
+  const channel = state.channels[state.channelIndex];
+  const source = getChannelSources(channel)[state.sourceIndex];
+  if (canUseNativeAirPlay() && canDirectAirPlaySource(source)) {
     await startNativeAirPlay();
     return;
   }
@@ -862,7 +865,7 @@ async function startCasting() {
   openCastPanel();
   const copied = await copyPlaylistLink({ silent: true });
   showToast(copied ? "已复制电视播放列表" : "电视播放列表");
-  setStatus(copied ? "电视播放列表已复制" : "请复制电视播放列表", "warn");
+  setStatus(canUseNativeAirPlay() ? "请选择电视播放方式" : copied ? "电视播放列表已复制" : "请复制电视播放列表", "warn");
 }
 
 function openCastPanel() {
@@ -941,6 +944,7 @@ function prepareNativeAirPlaySource(channel, source) {
 
   suppressPauseTracking();
   clearNativePlaylistObjectUrl();
+  player.setAttribute("x-webkit-airplay", "allow");
   player.removeAttribute("src");
   player.load();
   player.src = source.url;
@@ -1086,6 +1090,16 @@ function shouldUseNativeHlsProxy(source) {
     !isDirectMediaSource(source) &&
     isMobileNativeHlsBrowser()
   );
+}
+
+function canDirectAirPlaySource(source) {
+  if (!source?.url || !canUseNativeAirPlay()) return false;
+  if (shouldUseNativeHlsProxy(source)) return false;
+  return source.url.startsWith("https://") || !isMobileNativeHlsBrowser();
+}
+
+function syncAirPlayAttribute(source, nativeProxyingHls) {
+  player.setAttribute("x-webkit-airplay", nativeProxyingHls || !canDirectAirPlaySource(source) ? "deny" : "allow");
 }
 
 function isMobileNativeHlsBrowser() {
