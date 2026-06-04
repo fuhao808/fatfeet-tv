@@ -64,6 +64,8 @@ const state = {
   lastProgressAt: 0,
   lastCurrentTime: 0,
   autoplayRequested: false,
+  userPaused: false,
+  suppressPauseTrackingUntil: 0,
   guideQuery: "",
   guideCategory: "all",
   libraryQuery: "",
@@ -117,7 +119,24 @@ function bindControls() {
   player.addEventListener("canplay", notePlaybackProgress);
   player.addEventListener("progress", notePlaybackProgress);
   player.addEventListener("timeupdate", notePlaybackProgress);
+  player.addEventListener("play", () => {
+    if (isPauseTrackingSuppressed()) return;
+    state.userPaused = false;
+    state.autoplayRequested = true;
+  });
+  player.addEventListener("pause", () => {
+    if (isPauseTrackingSuppressed()) return;
+    state.userPaused = true;
+    state.autoplayRequested = false;
+    clearRecoveryTimer();
+    setStatus("已暂停", "warn");
+    sourceHealth.textContent = `线路 ${state.sourceIndex + 1} 暂停`;
+  });
   player.addEventListener("playing", () => {
+    if (!isPauseTrackingSuppressed()) {
+      state.userPaused = false;
+      state.autoplayRequested = true;
+    }
     notePlaybackProgress();
     clearRecoveryTimer();
     setStatus("播放中", "good");
@@ -173,6 +192,7 @@ function tuneTo(index, options = {}) {
     return;
   }
 
+  if (options.autoplay) state.userPaused = false;
   state.channelIndex = index;
   state.sourceIndex = pickPreferredSource(channel);
   resetChannelFailures(channel);
@@ -211,7 +231,8 @@ function loadCurrentSource({ autoplay = true } = {}) {
   state.sourceLoadStartedAt = Date.now();
   state.lastProgressAt = 0;
   state.lastCurrentTime = 0;
-  state.autoplayRequested = autoplay;
+  const shouldAutoplay = autoplay && !state.userPaused;
+  state.autoplayRequested = shouldAutoplay;
   const nativeHls = !isDirectMediaSource(source) && shouldUseNativeHls(source);
   const proxyingHls = !nativeHls && shouldProxyHlsSource(source);
   const sourceMode = nativeHls && canUseNativeAirPlay() ? " 原生" : proxyingHls ? " 代理" : "";
@@ -226,6 +247,7 @@ function loadCurrentSource({ autoplay = true } = {}) {
     state.hls.destroy();
     state.hls = null;
   }
+  suppressPauseTracking();
   player.removeAttribute("src");
   player.load();
 
@@ -253,7 +275,7 @@ function loadCurrentSource({ autoplay = true } = {}) {
     setStatus("浏览器可能不支持 HLS", "warn");
   }
 
-  if (autoplay) {
+  if (shouldAutoplay) {
     player.play().catch(() => {
       setStatus("点击播放按钮开始", "warn");
     });
@@ -261,6 +283,7 @@ function loadCurrentSource({ autoplay = true } = {}) {
 }
 
 function scheduleSourceRecovery(message, options = {}) {
+  if (state.userPaused) return;
   if (!options.force && player.paused && !hasPlaybackStarted()) return;
   clearRecoveryTimer();
   setStatus(message, "warn");
@@ -272,6 +295,8 @@ function scheduleSourceRecovery(message, options = {}) {
 }
 
 function handleFatalHlsError(data) {
+  if (state.userPaused) return;
+
   if (data?.type === window.Hls?.ErrorTypes?.MEDIA_ERROR && state.hls?.recoverMediaError) {
     setStatus("正在恢复画面", "warn");
     state.hls.recoverMediaError();
@@ -293,6 +318,13 @@ function handleFatalHlsError(data) {
 }
 
 function recoverCurrentSourceOrSwitch(message) {
+  if (state.userPaused) {
+    clearRecoveryTimer();
+    setStatus("已暂停", "warn");
+    sourceHealth.textContent = `线路 ${state.sourceIndex + 1} 暂停`;
+    return;
+  }
+
   if (hasRecentProgress()) {
     clearRecoveryTimer();
     setStatus("播放中", "good");
@@ -348,7 +380,17 @@ function clearRecoveryTimer() {
   }
 }
 
+function suppressPauseTracking(durationMs = 900) {
+  state.suppressPauseTrackingUntil = Math.max(state.suppressPauseTrackingUntil, Date.now() + durationMs);
+}
+
+function isPauseTrackingSuppressed() {
+  return Date.now() < state.suppressPauseTrackingUntil;
+}
+
 function switchSource(message) {
+  if (state.userPaused) return;
+
   const channel = state.channels[state.channelIndex];
   const sources = getChannelSources(channel);
   if (!sources.length) return;
@@ -387,6 +429,7 @@ function selectSource(index) {
   const source = getChannelSources(channel)[index];
   if (!source) return;
   clearSourceFailure(channel, index);
+  state.userPaused = false;
   state.sourceRecoveries.delete(sourceKey(channel, source));
   state.sourceIndex = index;
   setStatus(`切换到线路 ${index + 1}`, "warn");
@@ -406,7 +449,7 @@ async function refreshCatalog() {
   if (refreshed.length) {
     state.channels = refreshed;
     const nextIndex = Math.max(0, state.channels.findIndex((channel) => channel.id === currentId));
-    tuneTo(nextIndex, { autoplay: state.initialized });
+    tuneTo(nextIndex, { autoplay: state.initialized && !state.userPaused });
     showToast("列表已刷新");
   } else {
     showToast("刷新失败，保留当前列表");
@@ -694,6 +737,7 @@ async function startNativeAirPlay() {
 
 function prepareNativeAirPlaySource(channel, source) {
   clearRecoveryTimer();
+  state.userPaused = false;
   state.autoplayRequested = true;
   state.sourceLoadStartedAt = Date.now();
   state.lastProgressAt = 0;
@@ -704,6 +748,7 @@ function prepareNativeAirPlaySource(channel, source) {
     state.hls = null;
   }
 
+  suppressPauseTracking();
   player.removeAttribute("src");
   player.load();
   player.src = source.url;
