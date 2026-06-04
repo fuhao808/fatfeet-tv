@@ -83,6 +83,18 @@ button {
   box-shadow: var(--shadow);
 }
 
+.video-frame::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 3;
+  height: 34%;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(to top, rgba(2, 3, 4, 0.6), rgba(2, 3, 4, 0));
+}
+
 .player {
   display: block;
   width: 100%;
@@ -134,21 +146,21 @@ button {
 .view-mode-controls {
   position: absolute;
   z-index: 6;
-  top: 10px;
-  right: 10px;
+  right: 12px;
+  bottom: 52px;
   display: flex;
-  gap: 5px;
-  padding: 5px;
+  gap: 4px;
+  padding: 4px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: var(--radius);
-  background: rgba(4, 6, 9, 0.62);
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.38);
+  background: rgba(4, 6, 9, 0.68);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.36);
   backdrop-filter: blur(18px);
 }
 
 .view-mode-button {
-  width: 34px;
-  height: 32px;
+  width: 32px;
+  height: 30px;
   display: grid;
   place-items: center;
   border: 0;
@@ -243,8 +255,8 @@ body.view-page-maximized .video-frame {
 }
 
 body.view-page-maximized .view-mode-controls {
-  top: 14px;
   right: 14px;
+  bottom: 58px;
 }
 
 .brand,
@@ -990,15 +1002,15 @@ body.view-page-maximized .view-mode-controls {
   }
 
   .view-mode-controls {
-    top: 6px;
-    right: 6px;
+    right: 8px;
+    bottom: 44px;
     gap: 3px;
     padding: 4px;
   }
 
   .view-mode-button {
-    width: 30px;
-    height: 28px;
+    width: 29px;
+    height: 27px;
   }
 
   .view-mode-button svg {
