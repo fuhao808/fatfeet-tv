@@ -899,15 +899,14 @@ async function startCasting() {
     return;
   }
 
-  if (canUseNativeAirPlay()) {
+  if (canUseNativeAirPlay() && canDirectAirPlaySource(source)) {
     await startNativeAirPlay();
     return;
   }
 
-  if (await startRemotePlayback()) return;
+  if (canUseRemotePlayback(source) && (await startRemotePlayback())) return;
 
-  setStatus("当前浏览器没有可用投屏", "warn");
-  showToast("请用 Safari AirPlay 或系统屏幕镜像");
+  startMirrorCastMode();
 }
 
 async function startNativeAirPlay() {
@@ -916,6 +915,11 @@ async function startNativeAirPlay() {
   if (!source?.url) {
     setStatus("请先选择频道", "warn");
     showToast("请先选择频道");
+    return;
+  }
+
+  if (!canDirectAirPlaySource(source)) {
+    startMirrorCastMode();
     return;
   }
 
@@ -936,6 +940,17 @@ async function startNativeAirPlay() {
   }
 }
 
+function startMirrorCastMode() {
+  if (!state.pageMaximized) {
+    state.pageMaximized = true;
+    if (state.libraryOpen) openLibrary(false);
+    applyViewModeState();
+  }
+
+  setStatus("镜像投屏模式", "warn");
+  showToast("打开控制中心，选择屏幕镜像");
+}
+
 async function startRemotePlayback() {
   if (typeof player.remote?.prompt !== "function") return false;
 
@@ -948,6 +963,12 @@ async function startRemotePlayback() {
     console.warn("Remote playback unavailable", error);
     return false;
   }
+}
+
+function canUseRemotePlayback(source) {
+  if (!source?.url || typeof player.remote?.prompt !== "function") return false;
+  if (shouldUseNativeHlsProxy(source) || shouldProxyHlsSource(source)) return false;
+  return true;
 }
 
 function prepareNativeAirPlaySource(channel, source) {
