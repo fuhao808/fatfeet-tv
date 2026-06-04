@@ -43,6 +43,7 @@ const castChannelTitle = document.querySelector("#castChannelTitle");
 const castSourceTitle = document.querySelector("#castSourceTitle");
 const castPlaylistUrl = document.querySelector("#castPlaylistUrl");
 const castSourceUrl = document.querySelector("#castSourceUrl");
+const airplayButton = document.querySelector("#airplayButton");
 const copyPlaylistButton = document.querySelector("#copyPlaylistButton");
 const copySourceButton = document.querySelector("#copySourceButton");
 const openPlaylistLink = document.querySelector("#openPlaylistLink");
@@ -127,6 +128,7 @@ function bindControls() {
   castModal.addEventListener("click", (event) => {
     if (event.target === castModal) closeCastPanel();
   });
+  airplayButton.addEventListener("click", startNativeAirPlay);
   copyPlaylistButton.addEventListener("click", copyPlaylistLink);
   copySourceButton.addEventListener("click", copyCurrentSourceLink);
   pageMaxButton.addEventListener("click", togglePageMaximized);
@@ -210,9 +212,14 @@ function loadCurrentSource({ autoplay = true } = {}) {
   state.lastProgressAt = 0;
   state.lastCurrentTime = 0;
   state.autoplayRequested = autoplay;
-  const proxyingHls = shouldProxyHlsSource(source);
-  setStatus(proxyingHls ? "线上代理连接中" : source.status === "ok" ? "连接稳定" : "尝试线路", source.status === "ok" ? "good" : "warn");
-  sourceHealth.textContent = `线路 ${state.sourceIndex + 1}${proxyingHls ? " 代理" : ""}`;
+  const nativeHls = !isDirectMediaSource(source) && shouldUseNativeHls(source);
+  const proxyingHls = !nativeHls && shouldProxyHlsSource(source);
+  const sourceMode = nativeHls && canUseNativeAirPlay() ? " 原生" : proxyingHls ? " 代理" : "";
+  setStatus(
+    nativeHls && canUseNativeAirPlay() ? "AirPlay 原生线路" : proxyingHls ? "线上代理连接中" : source.status === "ok" ? "连接稳定" : "尝试线路",
+    source.status === "ok" ? "good" : "warn"
+  );
+  sourceHealth.textContent = `线路 ${state.sourceIndex + 1}${sourceMode}`;
   renderSources(channel);
 
   if (state.hls) {
@@ -224,7 +231,7 @@ function loadCurrentSource({ autoplay = true } = {}) {
 
   if (isDirectMediaSource(source)) {
     player.src = source.url;
-  } else if (!proxyingHls && player.canPlayType("application/vnd.apple.mpegurl")) {
+  } else if (shouldUseNativeHls(source)) {
     player.src = source.url;
   } else if (window.Hls?.isSupported()) {
     state.hls = new window.Hls({
@@ -613,6 +620,11 @@ function openLibrary(open) {
 }
 
 async function startCasting() {
+  if (canUseNativeAirPlay()) {
+    await startNativeAirPlay();
+    return;
+  }
+
   openCastPanel();
   const copied = await copyPlaylistLink({ silent: true });
   showToast(copied ? "已复制电视播放列表" : "电视播放列表");
@@ -645,7 +657,62 @@ function updateCastPanel() {
   castPlaylistUrl.value = playlistUrl;
   castSourceUrl.value = sourceUrl;
   openPlaylistLink.href = playlistUrl;
+  airplayButton.hidden = !canUseNativeAirPlay();
+  airplayButton.disabled = !sourceUrl || !canUseNativeAirPlay();
   copySourceButton.disabled = !sourceUrl;
+}
+
+async function startNativeAirPlay() {
+  const channel = state.channels[state.channelIndex];
+  const source = getChannelSources(channel)[state.sourceIndex];
+  if (!source?.url) {
+    openCastPanel();
+    setStatus("请先选择频道", "warn");
+    showToast("请先选择频道");
+    return;
+  }
+
+  if (!canUseNativeAirPlay()) {
+    openCastPanel();
+    setStatus("当前浏览器不支持 AirPlay", "warn");
+    showToast("请用 Safari 或电视 App");
+    return;
+  }
+
+  try {
+    prepareNativeAirPlaySource(channel, source);
+    if (state.castOpen) closeCastPanel();
+    setStatus("正在打开 AirPlay", "warn");
+    showToast("选择 AirPlay 设备");
+    player.webkitShowPlaybackTargetPicker();
+  } catch {
+    openCastPanel();
+    setStatus("AirPlay 打开失败", "warn");
+    showToast("可用 M3U 在电视端播放");
+  }
+}
+
+function prepareNativeAirPlaySource(channel, source) {
+  clearRecoveryTimer();
+  state.autoplayRequested = true;
+  state.sourceLoadStartedAt = Date.now();
+  state.lastProgressAt = 0;
+  state.lastCurrentTime = 0;
+
+  if (state.hls) {
+    state.hls.destroy();
+    state.hls = null;
+  }
+
+  player.removeAttribute("src");
+  player.load();
+  player.src = source.url;
+  player.load();
+  sourceHealth.textContent = `线路 ${state.sourceIndex + 1} AirPlay`;
+  renderSources(channel);
+  player.play().catch(() => {
+    setStatus("请选择 AirPlay 设备", "warn");
+  });
 }
 
 async function copyPlaylistLink(options = {}) {
@@ -766,6 +833,16 @@ function syncSystemFullscreenButton() {
 
 function shouldProxyHlsSource(source) {
   return window.location.protocol === "https:" && source?.url?.startsWith("http://") && !isDirectMediaSource(source) && Boolean(window.Hls?.isSupported?.());
+}
+
+function shouldUseNativeHls(source) {
+  if (!player.canPlayType("application/vnd.apple.mpegurl")) return false;
+  if (canUseNativeAirPlay()) return true;
+  return !shouldProxyHlsSource(source);
+}
+
+function canUseNativeAirPlay() {
+  return typeof player.webkitShowPlaybackTargetPicker === "function";
 }
 
 function createHttpsProxyLoader() {

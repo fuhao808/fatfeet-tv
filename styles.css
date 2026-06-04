@@ -37,6 +37,10 @@ button {
   font: inherit;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .tv-shell {
   width: 100%;
   min-height: 100vh;
@@ -772,7 +776,7 @@ body.view-page-maximized .view-mode-controls {
 
 .cast-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 8px;
 }
 
