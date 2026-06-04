@@ -6,6 +6,7 @@ const PLAYBACK_STALL_DELAY_MS = 24000;
 const FATAL_RECOVERY_DELAY_MS = 7000;
 const RECOVERY_SETTLE_MS = 18000;
 const MAX_CURRENT_SOURCE_RECOVERIES = 1;
+const HTTPS_HLS_PROXY_PREFIX = "https://api.codetabs.com/v1/proxy?quest=";
 const CHANNEL_CATEGORIES = [
   { id: "all", label: "全部" },
   { id: "cctv", label: "央视" },
@@ -186,8 +187,9 @@ function loadCurrentSource({ autoplay = true } = {}) {
   state.lastProgressAt = 0;
   state.lastCurrentTime = 0;
   state.autoplayRequested = autoplay;
-  setStatus(source.status === "ok" ? "连接稳定" : "尝试线路", source.status === "ok" ? "good" : "warn");
-  sourceHealth.textContent = `线路 ${state.sourceIndex + 1}`;
+  const proxyingHls = shouldProxyHlsSource(source);
+  setStatus(proxyingHls ? "线上代理连接中" : source.status === "ok" ? "连接稳定" : "尝试线路", source.status === "ok" ? "good" : "warn");
+  sourceHealth.textContent = `线路 ${state.sourceIndex + 1}${proxyingHls ? " 代理" : ""}`;
   renderSources(channel);
 
   if (state.hls) {
@@ -201,6 +203,7 @@ function loadCurrentSource({ autoplay = true } = {}) {
     player.src = source.url;
   } else if (window.Hls?.isSupported()) {
     state.hls = new window.Hls({
+      loader: proxyingHls ? createHttpsProxyLoader() : undefined,
       lowLatencyMode: false,
       liveSyncDurationCount: 8,
       liveMaxLatencyDurationCount: 18,
@@ -546,11 +549,12 @@ function renderSources(channel) {
     button.disabled = false;
     button.addEventListener("click", () => selectSource(index));
     const protocol = source.url.startsWith("https://") ? "HTTPS" : "HTTP";
+    const protocolLabel = shouldProxyHlsSource(source) ? `${protocol} 代理` : protocol;
     const stateLabel = failed ? "本轮失败" : source.status === "ok" ? "可用" : source.status === "bad" ? "较慢" : "未知";
     button.innerHTML = `
       <span>${index >= SOURCE_BUTTON_LIMIT ? "备用" : "线路"} ${index + 1}</span>
       <strong>${escapeHtml(stateLabel)}</strong>
-      <small>${escapeHtml(protocol)} · ${escapeHtml(source.origin || "来源")}</small>
+      <small>${escapeHtml(protocolLabel)} · ${escapeHtml(source.origin || "来源")}</small>
     `;
     sourceList.appendChild(button);
   });
@@ -666,6 +670,110 @@ function syncSystemFullscreenButton() {
   systemFullscreenButton.setAttribute("aria-pressed", String(isFullscreen));
   systemFullscreenButton.setAttribute("aria-label", isFullscreen ? "退出电脑全屏" : "电脑全屏");
   systemFullscreenButton.title = isFullscreen ? "退出电脑全屏" : "电脑全屏";
+}
+
+function shouldProxyHlsSource(source) {
+  return window.location.protocol === "https:" && source?.url?.startsWith("http://") && !isDirectMediaSource(source) && Boolean(window.Hls?.isSupported?.());
+}
+
+function createHttpsProxyLoader() {
+  const BaseLoader = window.Hls.DefaultConfig.loader;
+
+  return class FatFeetHttpsProxyLoader {
+    constructor(config) {
+      this.loader = new BaseLoader(config);
+    }
+
+    get stats() {
+      return this.loader.stats;
+    }
+
+    get context() {
+      return this.loader.context;
+    }
+
+    load(context, config, callbacks) {
+      const originalUrl = context.url;
+      if (!shouldProxyUrl(originalUrl)) {
+        this.loader.load(context, config, callbacks);
+        return;
+      }
+
+      const proxiedContext = {
+        ...context,
+        url: proxyHlsUrl(originalUrl)
+      };
+
+      const proxiedCallbacks = {
+        ...callbacks,
+        onSuccess: (response, stats, loaderContext, networkDetails) => {
+          const data = typeof response.data === "string" && response.data.includes("#EXTM3U")
+            ? rewriteHlsPlaylist(response.data, originalUrl)
+            : response.data;
+          callbacks.onSuccess(
+            {
+              ...response,
+              data,
+              url: originalUrl
+            },
+            stats,
+            {
+              ...loaderContext,
+              url: originalUrl
+            },
+            networkDetails
+          );
+        }
+      };
+
+      this.loader.load(proxiedContext, config, proxiedCallbacks);
+    }
+
+    abort() {
+      this.loader.abort();
+    }
+
+    destroy() {
+      this.loader.destroy();
+    }
+  };
+}
+
+function rewriteHlsPlaylist(text, baseUrl) {
+  return text
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => {
+      if (!line.trim()) return line;
+
+      if (line.startsWith("#")) {
+        return line.replace(/URI="([^"]+)"/g, (_, uri) => `URI="${rewriteHlsUrl(uri, baseUrl)}"`);
+      }
+
+      return rewriteHlsUrl(line.trim(), baseUrl);
+    })
+    .join("\n");
+}
+
+function rewriteHlsUrl(value, baseUrl) {
+  const resolved = resolveUrl(value, baseUrl);
+  return shouldProxyUrl(resolved) ? proxyHlsUrl(resolved) : resolved;
+}
+
+function proxyHlsUrl(url) {
+  return `${HTTPS_HLS_PROXY_PREFIX}${encodeURIComponent(url)}`;
+}
+
+function shouldProxyUrl(url) {
+  return String(url || "").startsWith("http://");
+}
+
+function resolveUrl(value, baseUrl) {
+  try {
+    return new URL(value, baseUrl).toString();
+  } catch {
+    return value;
+  }
 }
 
 function sourceKey(channel, source) {
