@@ -12,7 +12,7 @@ const HTTPS_HLS_PROXY_PROVIDERS = [
   { id: "codetabs", prefix: "https://api.codetabs.com/v1/proxy?quest=" },
   { id: "allorigins", prefix: "https://api.allorigins.win/raw?url=" }
 ];
-const SERVICE_WORKER_URL = "./sw.js?v=20260605-1";
+const SERVICE_WORKER_URL = "./sw.js?v=20260605-2";
 const HLS_PROXY_PATH = "./__hls_proxy__";
 const CHANNEL_CATEGORIES = [
   { id: "all", label: "全部" },
@@ -284,7 +284,7 @@ async function loadCurrentSource({ autoplay = true } = {}) {
     player.src = source.url;
   } else if (window.Hls?.isSupported()) {
     state.hls = new window.Hls({
-      loader: proxyingHls ? createHttpsProxyLoader() : undefined,
+      loader: shouldUseHttpsHlsLoader(source) ? createHttpsProxyLoader() : undefined,
       lowLatencyMode: false,
       liveSyncDurationCount: 8,
       liveMaxLatencyDurationCount: 18,
@@ -1176,10 +1176,18 @@ function shouldUseNativeHls(source) {
 function shouldUseNativeHlsProxy(source) {
   return (
     window.location.protocol === "https:" &&
-    source?.url?.startsWith("http://") &&
     !isDirectMediaSource(source) &&
-    isMobileNativeHlsBrowser()
+    isMobileNativeHlsBrowser() &&
+    (source?.url?.startsWith("http://") || mayContainHttpChildPlaylist(source))
   );
+}
+
+function shouldUseHttpsHlsLoader(source) {
+  return window.location.protocol === "https:" && !isDirectMediaSource(source) && Boolean(window.Hls?.isSupported?.());
+}
+
+function mayContainHttpChildPlaylist(source) {
+  return source?.origin === "EPG.pw China HTTPS" || /stream1\.freetv\.fun/i.test(source?.url || "");
 }
 
 function canDirectAirPlaySource(source) {
@@ -1226,7 +1234,7 @@ function createHttpsProxyLoader() {
       const originalUrl = context.url;
       if (!shouldProxyUrl(originalUrl)) {
         this.loader = new BaseLoader(config);
-        this.loader.load(context, config, callbacks);
+        this.loader.load(context, config, rewritePlaylistCallbacks(callbacks, originalUrl));
         return;
       }
 
@@ -1264,26 +1272,7 @@ function createHttpsProxyLoader() {
           maxRetryDelay: 0
         };
         const proxiedCallbacks = {
-          ...callbacks,
-          onSuccess: (response, stats, loaderContext, networkDetails) => {
-            const data =
-              typeof response.data === "string" && response.data.includes("#EXTM3U")
-                ? rewriteHlsPlaylist(response.data, originalUrl)
-                : response.data;
-            callbacks.onSuccess?.(
-              {
-                ...response,
-                data,
-                url: originalUrl
-              },
-              stats,
-              {
-                ...loaderContext,
-                url: originalUrl
-              },
-              networkDetails
-            );
-          },
+          ...rewritePlaylistCallbacks(callbacks, originalUrl),
           onError: (response, loaderContext, ...rest) => {
             if (attemptIndex < candidates.length) {
               tryNextProxy(response);
@@ -1329,6 +1318,31 @@ function createHttpsProxyLoader() {
     destroy() {
       this.destroyed = true;
       this.loader?.destroy?.();
+    }
+  };
+}
+
+function rewritePlaylistCallbacks(callbacks, originalUrl) {
+  return {
+    ...callbacks,
+    onSuccess: (response, stats, loaderContext, networkDetails) => {
+      const data =
+        typeof response.data === "string" && response.data.includes("#EXTM3U")
+          ? rewriteHlsPlaylist(response.data, originalUrl)
+          : response.data;
+      callbacks.onSuccess?.(
+        {
+          ...response,
+          data,
+          url: originalUrl
+        },
+        stats,
+        {
+          ...loaderContext,
+          url: originalUrl
+        },
+        networkDetails
+      );
     }
   };
 }

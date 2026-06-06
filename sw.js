@@ -1,4 +1,4 @@
-const CACHE_VERSION = "fatfeet-tv-hls-proxy-20260605-1";
+const CACHE_VERSION = "fatfeet-tv-hls-proxy-20260605-2";
 const HLS_PROXY_PLAYLIST_TIMEOUT_MS = 6500;
 const HLS_PROXY_SEGMENT_TIMEOUT_MS = 11000;
 const HTTPS_HLS_PROXY_PROVIDERS = [
@@ -25,7 +25,7 @@ async function handleHlsProxyRequest(requestUrl) {
   const targetUrl = requestUrl.searchParams.get("url") || "";
   const kind = requestUrl.searchParams.get("kind") || "playlist";
 
-  if (!targetUrl.startsWith("http://")) {
+  if (!/^https?:\/\//i.test(targetUrl)) {
     return new Response("Unsupported HLS proxy target", {
       status: 400,
       headers: noStoreHeaders("text/plain; charset=utf-8")
@@ -34,7 +34,7 @@ async function handleHlsProxyRequest(requestUrl) {
 
   try {
     const timeoutMs = kind === "segment" ? HLS_PROXY_SEGMENT_TIMEOUT_MS : HLS_PROXY_PLAYLIST_TIMEOUT_MS;
-    const response = await fetchFirstHlsProxy(targetUrl, timeoutMs);
+    const response = await fetchHlsResource(targetUrl, timeoutMs);
 
     if (!response.ok) {
       return new Response(await response.text(), {
@@ -127,6 +127,24 @@ async function fetchFirstHlsProxy(url, timeoutMs) {
   }
 
   throw lastError || new Error("All HLS proxies failed");
+}
+
+async function fetchHlsResource(url, timeoutMs) {
+  if (String(url || "").startsWith("http://")) {
+    return fetchFirstHlsProxy(url, timeoutMs);
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      cache: "no-store",
+      redirect: "follow",
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function proxyHlsUrl(url, provider = HTTPS_HLS_PROXY_PROVIDERS[0]) {
