@@ -23,6 +23,18 @@ const CHANNEL_CATEGORIES = [
   { id: "other", label: "其他" }
 ];
 
+const EMPTY_HLS_LOADER_STATS = {
+  aborted: false,
+  loaded: 0,
+  retry: 0,
+  total: 0,
+  chunkCount: 0,
+  bwEstimate: 0,
+  loading: { start: 0, first: 0, end: 0 },
+  parsing: { start: 0, end: 0 },
+  buffering: { start: 0, first: 0, end: 0 }
+};
+
 const player = document.querySelector("#player");
 const videoFrame = document.querySelector(".video-frame");
 const playOverlay = document.querySelector("#playOverlay");
@@ -1223,7 +1235,7 @@ function createHttpsProxyLoader() {
     }
 
     get stats() {
-      return this.loader?.stats;
+      return this.loader?.stats || EMPTY_HLS_LOADER_STATS;
     }
 
     get context() {
