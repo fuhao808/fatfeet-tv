@@ -1,5 +1,10 @@
-const CACHE_VERSION = "fatfeet-tv-hls-proxy-20260604-12";
-const HTTPS_HLS_PROXY_PREFIX = "https://api.codetabs.com/v1/proxy?quest=";
+const CACHE_VERSION = "fatfeet-tv-hls-proxy-20260605-1";
+const HLS_PROXY_PLAYLIST_TIMEOUT_MS = 6500;
+const HLS_PROXY_SEGMENT_TIMEOUT_MS = 11000;
+const HTTPS_HLS_PROXY_PROVIDERS = [
+  { id: "codetabs", prefix: "https://api.codetabs.com/v1/proxy?quest=" },
+  { id: "allorigins", prefix: "https://api.allorigins.win/raw?url=" }
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -28,10 +33,8 @@ async function handleHlsProxyRequest(requestUrl) {
   }
 
   try {
-    const response = await fetch(proxyHlsUrl(targetUrl), {
-      cache: "no-store",
-      redirect: "follow"
-    });
+    const timeoutMs = kind === "segment" ? HLS_PROXY_SEGMENT_TIMEOUT_MS : HLS_PROXY_PLAYLIST_TIMEOUT_MS;
+    const response = await fetchFirstHlsProxy(targetUrl, timeoutMs);
 
     if (!response.ok) {
       return new Response(await response.text(), {
@@ -101,8 +104,40 @@ function resolveUrl(value, baseUrl) {
   }
 }
 
-function proxyHlsUrl(url) {
-  return `${HTTPS_HLS_PROXY_PREFIX}${encodeURIComponent(url)}`;
+async function fetchFirstHlsProxy(url, timeoutMs) {
+  let lastError = null;
+
+  for (const candidate of proxyHlsUrlCandidates(url)) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(candidate.url, {
+        cache: "no-store",
+        redirect: "follow",
+        signal: controller.signal
+      });
+      if (response.ok) return response;
+      lastError = new Error(`${candidate.id} returned ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw lastError || new Error("All HLS proxies failed");
+}
+
+function proxyHlsUrl(url, provider = HTTPS_HLS_PROXY_PROVIDERS[0]) {
+  return `${provider.prefix}${encodeURIComponent(url)}`;
+}
+
+function proxyHlsUrlCandidates(url) {
+  return HTTPS_HLS_PROXY_PROVIDERS.map((provider) => ({
+    id: provider.id,
+    url: proxyHlsUrl(url, provider)
+  }));
 }
 
 function noStoreHeaders(contentType) {

@@ -23,7 +23,7 @@ for (const source of config.sources) {
     });
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     const text = await response.text();
-    const parsed = parseM3U(text).map((item) => ({ ...item, upstream: source }));
+    const parsed = parseM3U(text, source).map((item) => ({ ...item, upstream: source }));
     upstreams.push(...parsed);
     console.log(`Loaded ${parsed.length} entries from ${source.name}`);
   } catch (error) {
@@ -35,6 +35,12 @@ const generatedEntries = expandGeneratedSourceFamilies(config.generatedSourceFam
 if (generatedEntries.length) {
   upstreams.push(...generatedEntries);
   console.log(`Added ${generatedEntries.length} generated source-family entries`);
+}
+
+const manualEntries = expandManualSources(config.manualSources || []);
+if (manualEntries.length) {
+  upstreams.push(...manualEntries);
+  console.log(`Added ${manualEntries.length} manual source entries`);
 }
 
 let channels = buildChannels(upstreams, config);
@@ -66,7 +72,7 @@ await fs.writeFile(playlistPath, buildPlaylist(channels));
 
 console.log(`Wrote ${channels.length} channels`);
 
-function parseM3U(text) {
+function parseM3U(text, source = {}) {
   const lines = text.replace(/\r/g, "").split("\n");
   const entries = [];
   let meta = null;
@@ -82,8 +88,9 @@ function parseM3U(text) {
       const attrName = getAttr(line, "tvg-name");
       const rawGroup = getAttr(line, "group-title");
       const group = rawGroup && !/^undefined$/i.test(rawGroup) ? rawGroup : inferGroup(title);
+      const preferredName = source.preferTitleName ? title || attrName : attrName || title;
       meta = {
-        name: cleanName(attrName || title || "未命名频道"),
+        name: cleanName(preferredName || "未命名频道"),
         group,
         logo: getAttr(line, "tvg-logo") || "",
         tvgId: getAttr(line, "tvg-id") || ""
@@ -102,6 +109,23 @@ function parseM3U(text) {
   }
 
   return entries;
+}
+
+function expandManualSources(sources) {
+  return sources
+    .filter((source) => source?.name && source?.url)
+    .map((source) => ({
+      name: source.name,
+      group: source.group || inferGroup(source.name),
+      logo: source.logo || "",
+      tvgId: source.tvgId || "",
+      url: source.url,
+      upstream: {
+        name: source.origin || "Manual",
+        priority: source.priority || 0,
+        region: source.region || "global"
+      }
+    }));
 }
 
 function expandGeneratedSourceFamilies(families) {
@@ -759,12 +783,15 @@ function canonicalName(name) {
     .replace(/CCTV-?4K/gi, "CCTV4K")
     .replace(/CCTV-?8K/gi, "CCTV8K")
     .replace(/CCTV-?5\+/gi, "CCTV5PLUS")
+    .replace(/CCTV-?5\s*PLUS\s*\d*/gi, "CCTV5PLUS")
+    .replace(/CCTV-?5P\b/gi, "CCTV5PLUS")
     .replace(/高清|超清|蓝光|HD|FHD|频道|直播/gi, "")
     .replace(/中央电视台/g, "CCTV")
     .replace(/央视/g, "CCTV")
     .replace(/CCTV-(\d+)/gi, "CCTV$1")
-    .replace(/^(CCTV5PLUS)(体育赛事|体育)$/i, "$1")
-    .replace(/^(CCTV\d{1,2})(综合|财经|综艺|中文国际|体育赛事|体育|电影|新闻|国防军事|电视剧|纪录|科教|戏曲|社会与法|少儿|音乐|奥林匹克|农业农村)$/i, "$1")
+    .replace(/CCTV0+(\d+)/gi, "CCTV$1")
+    .replace(/^(CCTV5PLUS)(\d+|[-_ ]?(体育赛事|体育))?$/i, "$1")
+    .replace(/^(CCTV\d{1,2})[-_ ]?(综合|财经|综艺|中文国际|体育赛事|体育|电影|新闻|国防军事|电视剧|纪录|科教|戏曲|社会与法|少儿|音乐|奥林匹克|农业农村)$/i, "$1")
     .toUpperCase();
 
   return normalized;
@@ -773,7 +800,10 @@ function canonicalName(name) {
 function displayName(name) {
   return cleanName(name)
     .replace(/中央电视台/g, "CCTV")
+    .replace(/CCTV-?5\s*(\+|plus)(\s*\d+)?/i, "CCTV-5+")
+    .replace(/CCTV-?5p/i, "CCTV-5+")
     .replace(/CCTV-?5\+/i, "CCTV-5+")
+    .replace(/CCTV-?0+(\d+)/gi, "CCTV-$1")
     .replace(/CCTV-?(\d+)/gi, "CCTV-$1")
     .replace(/\s+/g, " ")
     .trim();

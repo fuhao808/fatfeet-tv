@@ -6,8 +6,13 @@ const PLAYBACK_STALL_DELAY_MS = 24000;
 const FATAL_RECOVERY_DELAY_MS = 7000;
 const RECOVERY_SETTLE_MS = 18000;
 const MAX_CURRENT_SOURCE_RECOVERIES = 1;
-const HTTPS_HLS_PROXY_PREFIX = "https://api.codetabs.com/v1/proxy?quest=";
-const SERVICE_WORKER_URL = "./sw.js?v=20260604-12";
+const HLS_PROXY_PLAYLIST_TIMEOUT_MS = 6500;
+const HLS_PROXY_SEGMENT_TIMEOUT_MS = 11000;
+const HTTPS_HLS_PROXY_PROVIDERS = [
+  { id: "codetabs", prefix: "https://api.codetabs.com/v1/proxy?quest=" },
+  { id: "allorigins", prefix: "https://api.allorigins.win/raw?url=" }
+];
+const SERVICE_WORKER_URL = "./sw.js?v=20260605-1";
 const HLS_PROXY_PATH = "./__hls_proxy__";
 const CHANNEL_CATEGORIES = [
   { id: "all", label: "全部" },
@@ -284,7 +289,16 @@ async function loadCurrentSource({ autoplay = true } = {}) {
       liveSyncDurationCount: 8,
       liveMaxLatencyDurationCount: 18,
       maxBufferLength: 60,
-      backBufferLength: 30
+      backBufferLength: 30,
+      manifestLoadingTimeOut: HLS_PROXY_PLAYLIST_TIMEOUT_MS,
+      levelLoadingTimeOut: HLS_PROXY_PLAYLIST_TIMEOUT_MS,
+      fragLoadingTimeOut: HLS_PROXY_SEGMENT_TIMEOUT_MS,
+      manifestLoadingMaxRetry: 0,
+      levelLoadingMaxRetry: 0,
+      fragLoadingMaxRetry: 0,
+      manifestLoadingRetryDelay: 0,
+      levelLoadingRetryDelay: 0,
+      fragLoadingRetryDelay: 0
     });
     state.hls.loadSource(source.url);
     state.hls.attachMedia(player);
@@ -414,7 +428,7 @@ async function loadNativeProxiedHlsSource(source, sourceLoadToken) {
       return true;
     }
 
-    const response = await fetch(proxyHlsUrl(source.url), { cache: "no-store" });
+    const response = await fetchFirstHlsProxy(source.url, HLS_PROXY_PLAYLIST_TIMEOUT_MS);
     if (!response.ok) throw new Error(`Proxy returned ${response.status}`);
 
     const playlist = await response.text();
@@ -1195,60 +1209,126 @@ function createHttpsProxyLoader() {
 
   return class FatFeetHttpsProxyLoader {
     constructor(config) {
-      this.loader = new BaseLoader(config);
+      this.config = config;
+      this.loader = null;
+      this.destroyed = false;
     }
 
     get stats() {
-      return this.loader.stats;
+      return this.loader?.stats;
     }
 
     get context() {
-      return this.loader.context;
+      return this.loader?.context;
     }
 
     load(context, config, callbacks) {
       const originalUrl = context.url;
       if (!shouldProxyUrl(originalUrl)) {
+        this.loader = new BaseLoader(config);
         this.loader.load(context, config, callbacks);
         return;
       }
 
-      const proxiedContext = {
-        ...context,
-        url: proxyHlsUrl(originalUrl)
-      };
+      const candidates = proxyHlsUrlCandidates(originalUrl);
+      let attemptIndex = 0;
 
-      const proxiedCallbacks = {
-        ...callbacks,
-        onSuccess: (response, stats, loaderContext, networkDetails) => {
-          const data = typeof response.data === "string" && response.data.includes("#EXTM3U")
-            ? rewriteHlsPlaylist(response.data, originalUrl)
-            : response.data;
-          callbacks.onSuccess(
+      const tryNextProxy = (lastError) => {
+        if (this.destroyed) return;
+        if (attemptIndex >= candidates.length) {
+          callbacks.onError?.(
+            lastError || { code: 0, text: "All HLS proxies failed" },
             {
-              ...response,
-              data,
+              ...context,
               url: originalUrl
             },
-            stats,
-            {
-              ...loaderContext,
-              url: originalUrl
-            },
-            networkDetails
+            null
           );
+          return;
         }
+
+        this.loader?.destroy?.();
+        this.loader = new BaseLoader(config);
+
+        const candidate = candidates[attemptIndex];
+        attemptIndex += 1;
+        const proxiedContext = {
+          ...context,
+          url: candidate.url
+        };
+        const proxiedConfig = {
+          ...config,
+          timeout: Math.min(Number(config?.timeout) || HLS_PROXY_SEGMENT_TIMEOUT_MS, HLS_PROXY_SEGMENT_TIMEOUT_MS),
+          maxRetry: 0,
+          retryDelay: 0,
+          maxRetryDelay: 0
+        };
+        const proxiedCallbacks = {
+          ...callbacks,
+          onSuccess: (response, stats, loaderContext, networkDetails) => {
+            const data =
+              typeof response.data === "string" && response.data.includes("#EXTM3U")
+                ? rewriteHlsPlaylist(response.data, originalUrl)
+                : response.data;
+            callbacks.onSuccess?.(
+              {
+                ...response,
+                data,
+                url: originalUrl
+              },
+              stats,
+              {
+                ...loaderContext,
+                url: originalUrl
+              },
+              networkDetails
+            );
+          },
+          onError: (response, loaderContext, ...rest) => {
+            if (attemptIndex < candidates.length) {
+              tryNextProxy(response);
+              return;
+            }
+
+            callbacks.onError?.(
+              response,
+              {
+                ...loaderContext,
+                url: originalUrl
+              },
+              ...rest
+            );
+          },
+          onTimeout: (stats, loaderContext, ...rest) => {
+            if (attemptIndex < candidates.length) {
+              tryNextProxy({ code: 0, text: `${candidate.id} timed out` });
+              return;
+            }
+
+            callbacks.onTimeout?.(
+              stats,
+              {
+                ...loaderContext,
+                url: originalUrl
+              },
+              ...rest
+            );
+          }
+        };
+
+        this.loader.load(proxiedContext, proxiedConfig, proxiedCallbacks);
       };
 
-      this.loader.load(proxiedContext, config, proxiedCallbacks);
+      tryNextProxy();
     }
 
     abort() {
-      this.loader.abort();
+      this.loader?.abort?.();
     }
 
     destroy() {
-      this.loader.destroy();
+      this.destroyed = true;
+      this.loader?.destroy?.();
     }
   };
 }
@@ -1274,8 +1354,40 @@ function rewriteHlsUrl(value, baseUrl) {
   return shouldProxyUrl(resolved) ? proxyHlsUrl(resolved) : resolved;
 }
 
-function proxyHlsUrl(url) {
-  return `${HTTPS_HLS_PROXY_PREFIX}${encodeURIComponent(url)}`;
+async function fetchFirstHlsProxy(url, timeoutMs) {
+  let lastError = null;
+
+  for (const candidate of proxyHlsUrlCandidates(url)) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(candidate.url, {
+        cache: "no-store",
+        redirect: "follow",
+        signal: controller.signal
+      });
+      if (response.ok) return response;
+      lastError = new Error(`${candidate.id} returned ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
+  throw lastError || new Error("All HLS proxies failed");
+}
+
+function proxyHlsUrl(url, provider = HTTPS_HLS_PROXY_PROVIDERS[0]) {
+  return `${provider.prefix}${encodeURIComponent(url)}`;
+}
+
+function proxyHlsUrlCandidates(url) {
+  return HTTPS_HLS_PROXY_PROVIDERS.map((provider) => ({
+    id: provider.id,
+    url: proxyHlsUrl(url, provider)
+  }));
 }
 
 function shouldProxyUrl(url) {
