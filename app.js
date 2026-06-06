@@ -1328,7 +1328,7 @@ function rewritePlaylistCallbacks(callbacks, originalUrl) {
     onSuccess: (response, stats, loaderContext, networkDetails) => {
       const data =
         typeof response.data === "string" && response.data.includes("#EXTM3U")
-          ? rewriteHlsPlaylist(response.data, originalUrl)
+          ? rewriteHlsPlaylist(response.data, originalUrl, { proxyUrls: false })
           : response.data;
       callbacks.onSuccess?.(
         {
@@ -1347,7 +1347,7 @@ function rewritePlaylistCallbacks(callbacks, originalUrl) {
   };
 }
 
-function rewriteHlsPlaylist(text, baseUrl) {
+function rewriteHlsPlaylist(text, baseUrl, options = {}) {
   return text
     .replace(/\r/g, "")
     .split("\n")
@@ -1355,16 +1355,17 @@ function rewriteHlsPlaylist(text, baseUrl) {
       if (!line.trim()) return line;
 
       if (line.startsWith("#")) {
-        return line.replace(/URI="([^"]+)"/g, (_, uri) => `URI="${rewriteHlsUrl(uri, baseUrl)}"`);
+        return line.replace(/URI="([^"]+)"/g, (_, uri) => `URI="${rewriteHlsUrl(uri, baseUrl, options)}"`);
       }
 
-      return rewriteHlsUrl(line.trim(), baseUrl);
+      return rewriteHlsUrl(line.trim(), baseUrl, options);
     })
     .join("\n");
 }
 
-function rewriteHlsUrl(value, baseUrl) {
+function rewriteHlsUrl(value, baseUrl, options = {}) {
   const resolved = resolveUrl(value, baseUrl);
+  if (options.proxyUrls === false) return resolved;
   return shouldProxyUrl(resolved) ? proxyHlsUrl(resolved) : resolved;
 }
 
