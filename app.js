@@ -1180,8 +1180,8 @@ function shouldProxyHlsSource(source) {
 
 function shouldUseNativeHls(source) {
   if (!player.canPlayType("application/vnd.apple.mpegurl")) return false;
-  if (shouldUseNativeHlsProxy(source)) return true;
   if (mayContainHttpChildPlaylist(source) && window.Hls?.isSupported?.()) return false;
+  if (shouldUseNativeHlsProxy(source)) return true;
   if (canUseNativeAirPlay()) return true;
   return !shouldProxyHlsSource(source);
 }
