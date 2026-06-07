@@ -1,4 +1,4 @@
-const CACHE_VERSION = "fatfeet-tv-hls-proxy-20260605-2";
+const CACHE_VERSION = "fatfeet-tv-hls-proxy-20260607-1";
 const HLS_PROXY_PLAYLIST_TIMEOUT_MS = 6500;
 const HLS_PROXY_SEGMENT_TIMEOUT_MS = 11000;
 const HTTPS_HLS_PROXY_PROVIDERS = [

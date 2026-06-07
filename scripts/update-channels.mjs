@@ -266,7 +266,13 @@ async function checkChannelSources(channels, options) {
 
   const checked = channels.map((channel) => {
     const sources = channel.sources
-      .sort((a, b) => statusRank(b.status) - statusRank(a.status) || preferenceSort(channel.name, a, b) || latencySort(a, b) || sourceSort(a, b))
+      .sort(
+        (a, b) =>
+          statusRank(b.status) - statusRank(a.status) ||
+          preferenceSort(channel.name, a, b) ||
+          sourceSort(a, b) ||
+          latencySort(a, b)
+      )
       .map(({ reason, ...source }) => source);
     return {
       ...channel,
@@ -493,7 +499,24 @@ function statusRank(status) {
 }
 
 function sourceSort(a, b) {
-  return Number(b.url.startsWith("https://")) - Number(a.url.startsWith("https://")) || b.priority - a.priority;
+  return (
+    sourceTrustRank(b) - sourceTrustRank(a) ||
+    b.priority - a.priority ||
+    Number(b.url.startsWith("https://")) - Number(a.url.startsWith("https://"))
+  );
+}
+
+function sourceTrustRank(source) {
+  const origin = source.origin || "";
+  const url = source.url || "";
+  if (origin === "EPG.pw China HTTPS" || /stream1\.freetv\.fun/i.test(url)) return -20;
+  if (origin === "OleLive Manual" || /olelive\.com/i.test(url)) return -10;
+  if (origin === "IPTV org CCTV 69 Family" || /69\.30\.245\.50/i.test(url)) return 35;
+  if (origin === "myIPTV IPv4" || /112\.27\.235\.94/i.test(url)) return 32;
+  if (/^ZBDS IPv4/.test(origin)) return 28;
+  if (origin === "IPTV org CCTV 74 HD Family" || /74\.91\.26\.218/i.test(url)) return 25;
+  if (origin === "IPTV org Chinese Fallback") return 20;
+  return 0;
 }
 
 function latencySort(a, b) {

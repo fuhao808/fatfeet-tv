@@ -12,7 +12,7 @@ const HTTPS_HLS_PROXY_PROVIDERS = [
   { id: "codetabs", prefix: "https://api.codetabs.com/v1/proxy?quest=" },
   { id: "allorigins", prefix: "https://api.allorigins.win/raw?url=" }
 ];
-const SERVICE_WORKER_URL = "./sw.js?v=20260605-2";
+const SERVICE_WORKER_URL = "./sw.js?v=20260607-1";
 const HLS_PROXY_PATH = "./__hls_proxy__";
 const CHANNEL_CATEGORIES = [
   { id: "all", label: "全部" },
@@ -236,13 +236,10 @@ function tuneTo(index, options = {}) {
 function pickPreferredSource(channel) {
   const sources = getChannelSources(channel);
   if (!sources.length) return 0;
-  const needsHttps = window.location.protocol === "https:";
-  const preferred = sources.findIndex((source) => isSourceUsable(channel, source) && source.status === "ok" && (!needsHttps || source.url.startsWith("https://")));
+  const preferred = sources.findIndex((source) => isSourceUsable(channel, source) && source.status === "ok");
   if (preferred >= 0) return preferred;
-  const protocolSafe = sources.findIndex((source) => isSourceUsable(channel, source) && (!needsHttps || source.url.startsWith("https://")));
-  if (protocolSafe >= 0) return protocolSafe;
-  const anyOk = sources.findIndex((source) => isSourceUsable(channel, source) && source.status === "ok");
-  if (anyOk >= 0) return anyOk;
+  const usable = sources.findIndex((source) => isSourceUsable(channel, source));
+  if (usable >= 0) return usable;
   return 0;
 }
 
@@ -777,12 +774,6 @@ async function refreshCatalog() {
 
 function nextSourceIndex(channel, currentIndex) {
   const sources = getChannelSources(channel);
-  const needsHttps = window.location.protocol === "https:";
-  for (let offset = 1; offset <= sources.length; offset += 1) {
-    const index = (currentIndex + offset) % sources.length;
-    if (isSourceUsable(channel, sources[index]) && (!needsHttps || sources[index].url.startsWith("https://"))) return index;
-  }
-
   for (let offset = 1; offset <= sources.length; offset += 1) {
     const index = (currentIndex + offset) % sources.length;
     if (isSourceUsable(channel, sources[index])) return index;
