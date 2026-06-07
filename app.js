@@ -154,6 +154,10 @@ function bindControls() {
   });
   player.addEventListener("pause", () => {
     if (isPauseTrackingSuppressed()) return;
+    if (state.autoplayRequested && hasPendingPlayIntent() && !hasPlaybackStarted()) {
+      syncPlayOverlay();
+      return;
+    }
     state.userPaused = true;
     state.autoplayRequested = false;
     state.pendingPlayIntentUntil = 0;
